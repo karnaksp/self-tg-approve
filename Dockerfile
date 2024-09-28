@@ -11,4 +11,4 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-CMD ["bash", "-c", "make create_venv && make start_bot"]
+CMD ["bash", "-c", "make"]

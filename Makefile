@@ -1,12 +1,12 @@
 REQUIREMENTS_FILE = ./requirements.txt
-VENV_DIR      = myenv
+VENV_DIR = myenv
 
-.PHONY: all clean create_venv html Ex00 Ex01 install_req install_dep check_lint
+.PHONY: all create_venv start_bot
 
-all: cat clean
+all: create_venv start_bot
 
 create_venv:
-	@python3 -m venv $(VENV_DIR)
+	@python -m venv $(VENV_DIR)
 	@bash -c "source $(VENV_DIR)/bin/activate && \
 	pip install -r $(REQUIREMENTS_FILE)"
 
