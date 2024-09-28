@@ -6,9 +6,6 @@ COPY . /app
 
 RUN python3 -m pip install --upgrade pip
 
-RUN apt-get update && \
-    apt-get install -y make && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+RUN pip install -r requirements.txt
 
-CMD ["bash", "-c", "make"]
+CMD ["python3", "main.py"]
