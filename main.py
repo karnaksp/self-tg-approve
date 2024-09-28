@@ -18,7 +18,9 @@ from colorlog import ColoredFormatter
 TOKEN = "7239925662:AAHqJzk9AXcIRCNMt2SKb2gzQe1rHQIM32k"
 CHANNEL_ID = "-1002211156231"
 ADMIN_ID = 631336613
+global photo_expected, sticker_expected
 photo_expected = False
+sticker_expected = False
 
 
 def setup_logger():
@@ -51,25 +53,43 @@ async def start(update: Update, context):
     logger.info(f"Пользователю {update.message.from_user.id} отправлено приветственное")
 
 
-async def send_custom_sticker(update: Update, context):
-    user_id = update.message.from_user.id
-    if user_id == ADMIN_ID:
-        if context.args:
-            sticker_id = context.args[0]
+async def send_sticker_request(update: Update, context):
+    global sticker_expected
+    sticker_expected = True
+    await update.message.reply_text("Пожалуйста, отправьте стикер.")
+    logger.info(f"Запрос на стикер от пользователя {update.message.from_user.id}")
 
-            try:
-                await context.bot.send_sticker(chat_id=CHANNEL_ID, sticker=sticker_id)
-                await update.message.reply_text("Стикер успешно отправлен в канал.")
-            except TelegramError as e:
-                await update.message.reply_text(f"Ошибка при отправке стикера: {e}")
+
+async def handle_sticker(update: Update, context):
+    global sticker_expected
+    message = update.message
+    user_id = message.from_user.id
+    if user_id == ADMIN_ID:
+        if sticker_expected:
+            if message.sticker:
+                sticker_id = message.sticker.file_id
+                logger.info(
+                    f"Получен стикер ID: {sticker_id} от пользователя {message.chat.username}"
+                )
+                await context.bot.send_sticker(CHANNEL_ID, sticker_id)
+                logger.info(
+                    f"Стикер от {message.chat.username} отправлен в канал {CHANNEL_ID}"
+                )
+                sticker_expected = False
+            else:
+                await message.reply_text(
+                    "Это не стикер! Пожалуйста, отправьте именно стикер."
+                )
+                logger.warning(
+                    f"Пользователь {message.chat.username} отправил не стикер."
+                )
         else:
-            await update.message.reply_text(
-                "Пожалуйста, укажите ID стикера для отправки."
+            await message.reply_text(
+                "Пожалуйста, сначала отправьте команду /sendsticker."
             )
-    else:
-        await update.message.reply_text(
-            "У вас нет прав для отправки стикеров от имени бота."
-        )
+            logger.warning(
+                f"Пользователь {message.chat.username} попытался отправить стикер без запроса."
+            )
 
 
 async def info(update: Update, context):
@@ -113,6 +133,11 @@ async def coffee(update: Update, context):
         "https://www.youtube.com/watch?v=7XXu_-eoxHo",
         "https://www.youtube.com/watch?v=JxhvP1Mq9Gs",
         "https://www.youtube.com/watch?v=wxtvI_1i7V0",
+        "https://www.youtube.com/watch?v=WB_eq5uS0A0&ab_channel=SamuraiGirlD%27n%27B",
+        "https://www.youtube.com/watch?v=8hx4qiOGgDE&ab_channel=PhonkDemon",
+        "https://www.youtube.com/watch?v=A7WZhoGRjMI&ab_channel=Mr_MoMoMusic",
+        "https://www.youtube.com/watch?v=EtD7_8kCMHA&ab_channel=Deebu",
+        "https://www.youtube.com/watch?v=qvZsPYOrmh0&t=1s&ab_channel=HiddenbyLeaves",
     ]
     selected_media = random.choice(options)
     await context.bot.send_message(update.message.chat_id, selected_media)
@@ -122,14 +147,15 @@ async def coffee(update: Update, context):
 
 
 async def handle_message(update: Update, context):
+    global photo_expected
     message = update.message
     user_id = message.from_user.id
-    logger.info(f"Получено сообщение от пользователя {user_id}")
+    logger.info(f"Получено сообщение от пользователя {message.chat.username}")
 
     if photo_expected:
         if message.photo:
             photo_id = message.photo[-1].file_id
-            logger.debug(f"Фото ID: {photo_id} от пользователя {user_id}")
+            logger.debug(f"Фото ID: {photo_id} от пользователя {message.chat.username}")
 
             keyboard = [
                 [InlineKeyboardButton("Одобрить", callback_data=f"approve_{user_id}")],
@@ -140,10 +166,12 @@ async def handle_message(update: Update, context):
             await context.bot.send_photo(
                 ADMIN_ID,
                 photo_id,
-                caption=f"Запрос от пользователя {user_id}",
+                caption=f"Запрос от пользователя {message.chat.username}",
                 reply_markup=reply_markup,
             )
-            logger.info(f"Фото от {user_id} отправлено администратору {ADMIN_ID}")
+            logger.info(
+                f"Фото от {message.chat.username} отправлено администратору {ADMIN_ID}"
+            )
             photo_expected = False
         else:
             await message.reply_text("Это не мем!!!! (╬ಠ益ಠ)\n\nМне нужна картинка!")
@@ -158,7 +186,7 @@ async def button_handler(update: Update, context):
 
     if "approve_" in query.data:
         user_id = query.data.split("_")[1]
-        logger.info(f"Одобрение запроса пользователя {user_id}")
+        logger.info(f"Одобрение запроса пользователя {message.chat.username}")
         try:
             invite_link = await context.bot.create_chat_invite_link(CHANNEL_ID)
             await context.bot.send_message(
@@ -188,7 +216,8 @@ def main():
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", info))
-    application.add_handler(CommandHandler("sendsticker", send_custom_sticker))
+    application.add_handler(CommandHandler("sendsticker", send_sticker_request))
+    application.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
     application.add_handler(CommandHandler("join_request", join_request))
     application.add_handler(CommandHandler("coffee", coffee))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
