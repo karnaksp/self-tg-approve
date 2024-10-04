@@ -8,6 +8,7 @@ import logging
 import random
 import asyncio
 import re
+import os
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -33,7 +34,9 @@ ADMIN_ID = 631336613
 global photo_expected, sticker_expected
 photo_expected = False
 sticker_expected = False
-client = AsyncClient(host="http://localhost:11434")
+ollama_base_url = os.getenv("OLLAMA_BASE_URL")
+LLM_NAME = os.getenv("LLM")
+client = AsyncClient(host=ollama_base_url)
 
 waiting_phrases = [
     "Подожди немножечко, я подумаю... 🌸",
@@ -245,7 +248,7 @@ async def button_handler(update: Update, context):
 
 async def llama_chat(user_message):
     response = await client.chat(
-        model="llama3",
+        model=LLM_NAME,
         messages=[
             {
                 "role": "system",

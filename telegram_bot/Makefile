@@ -15,4 +15,4 @@ start_bot:
 	python main.py"
 
 clean:
-	@bash -c "rm -rf *.tgz newenv __pycache__"
+	@bash -c "rm -rf *.tgz myenv __pycache__"
