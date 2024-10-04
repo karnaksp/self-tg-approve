@@ -14,3 +14,5 @@ start_bot:
 	@bash -c "source $(VENV_DIR)/bin/activate && \
 	python main.py"
 
+clean:
+	@bash -c "rm -rf *.tgz newenv __pycache__"
