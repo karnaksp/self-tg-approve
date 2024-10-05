@@ -5,11 +5,11 @@ services:
     image: ollama/ollama:latest
     networks:
       - net
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:11434/ || exit 1"]
-      interval: 15s
-      timeout: 30s
-      retries: 10
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -f http://localhost:11434/ || exit 1"]
+    #   interval: 15s
+    #   timeout: 30s
+    #   retries: 10
     environment:
       - OLLAMA_BASE_URL=http://localhost:11434
     ports:
@@ -29,10 +29,10 @@ services:
       - net
     tty: true
     depends_on:
-      llm:
-        condition: service_healthy
-
-  database:
+      - llm
+  # entrypoint: ["/wait-for-it.sh", "llm:11434", "--", "your-entrypoint-command"]
+  
+  db:
     image: neo4j:5.11
     ports:
       - 7687:7687
@@ -40,10 +40,10 @@ services:
     env_file:
       - .env
     environment:
-      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
-      # - NEO4J_PLUGINS=["apoc"]
-      # - NEO4J_db_tx__log_rotation_retention__policy=false
-      # - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_AUTH=${USERNAME}/${PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_db_tx__log_rotation_retention__policy=false
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
     healthcheck:
       test: ["CMD-SHELL", "wget --verbose --tries=1 --spider localhost:7474 || exit 1"]
       interval: 15s
@@ -61,9 +61,9 @@ services:
     env_file:
       - .env
     environment:
-      - NEO4J_URI=${NEO4J_URI}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
-      - NEO4J_USERNAME=${NEO4J_USERNAME}
+      - URI=${URI}
+      - PASSWORD=${PASSWORD}
+      - USERNAME=${USERNAME}
       - OPENAI_API_KEY=${OPENAI_API_KEY-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
@@ -78,7 +78,7 @@ services:
     networks:
       - net
     depends_on:
-      database:
+      db:
         condition: service_healthy
       pull-model:
         condition: service_completed_successfully
@@ -95,16 +95,16 @@ services:
     env_file:
       - .env
     environment:
-      - NEO4J_URI=${NEO4J_URI}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
-      - NEO4J_USERNAME=${NEO4J_USERNAME}
-      - OPENAI_API_KEY=${OPENAI_API_KEY-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY-}
+      - URI=${URI}
+      - PASSWORD=${PASSWORD}
+      - USERNAME=${USERNAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
       - LLM=${LLM-llama3}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
       - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2-false}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
       - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -113,7 +113,7 @@ services:
     networks:
       - net
     depends_on:
-      database:
+      db:
         condition: service_healthy
       pull-model:
         condition: service_completed_successfully
@@ -126,16 +126,16 @@ services:
       context: .
       dockerfile: pdf_bot.Dockerfile
     environment:
-      - NEO4J_URI=${NEO4J_URI-neo4j://database:7687}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD-password}
-      - NEO4J_USERNAME=${NEO4J_USERNAME-neo4j}
-      - OPENAI_API_KEY=${OPENAI_API_KEY-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
-      - LLM=${LLM-llama2}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL-sentence_transformer}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT-"https://api.smith.langchain.com"}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2-false}
+      - URI=${URI}
+      - PASSWORD=${PASSWORD}
+      - USERNAME=${USERNAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - LLM=${LLM}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
       - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -144,7 +144,7 @@ services:
     networks:
       - net
     depends_on:
-      database:
+      db:
         condition: service_healthy
       pull-model:
         condition: service_completed_successfully
@@ -167,16 +167,16 @@ services:
     volumes:
       - $PWD/embedding_model:/embedding_model
     environment:
-      - NEO4J_URI=${NEO4J_URI-neo4j://database:7687}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD-password}
-      - NEO4J_USERNAME=${NEO4J_USERNAME-neo4j}
+      - URI=${URI}
+      - PASSWORD=${PASSWORD}
+      - USERNAME=${USERNAME}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}  
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL-http://host.docker.internal:11434}
-      - LLM=${LLM-llama2}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL-sentence_transformer}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT-"https://api.smith.langchain.com"}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2-false}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - LLM=${LLM}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
       - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -185,7 +185,7 @@ services:
     networks:
       - net
     depends_on:
-      database:
+      db:
         condition: service_healthy
       pull-model:
         condition: service_completed_successfully
@@ -236,6 +236,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    depends_on:
+      pull-model:
+        condition: service_completed_successfully
 
 networks:
   net:
+    driver: bridge

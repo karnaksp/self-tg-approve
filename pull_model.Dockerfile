@@ -3,6 +3,9 @@
 FROM ollama/ollama:latest AS ollama
 FROM babashka/babashka:latest
 
+COPY wait-for-it.sh /wait-for-it.sh
+RUN chmod +x /wait-for-it.sh
+
 COPY --from=ollama /bin/ollama ./bin/ollama
 
 COPY <<EOF pull_model.clj
@@ -27,4 +30,6 @@ EOF
 
 RUN chmod +x ./bin/ollama
 
+
 ENTRYPOINT ["bb", "-f", "pull_model.clj"]
+

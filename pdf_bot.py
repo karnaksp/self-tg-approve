@@ -18,14 +18,14 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 
 
-url = os.getenv("NEO4J_URI")
-username = os.getenv("NEO4J_USERNAME")
-password = os.getenv("NEO4J_PASSWORD")
+url = os.getenv("URI")
+username = os.getenv("USERNAME")
+password = os.getenv("PASSWORD")
 ollama_base_url = os.getenv("OLLAMA_BASE_URL")
 embedding_model_name = os.getenv("EMBEDDING_MODEL")
 llm_name = os.getenv("LLM")
 # Remapping for Langchain Neo4j integration
-os.environ["NEO4J_URL"] = url
+os.environ["URL"] = url
 
 logger = get_logger(__name__)
 
