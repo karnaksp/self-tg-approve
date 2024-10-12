@@ -1,4 +1,5 @@
 colorlog
+requests
 python-telegram-bot
 python-telegram-bot[job-queue]
 ollama

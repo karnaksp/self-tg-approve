@@ -1,7 +1,29 @@
+import logging
+from colorlog import ColoredFormatter
+
 class BaseLogger:
     def __init__(self) -> None:
-        self.info = print
+        self.logger = self.setup_logger()
 
+    def setup_logger(self):
+        handler = logging.StreamHandler()
+        formatter = ColoredFormatter(
+            "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            log_colors={
+                "DEBUG": "cyan",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "bold_red",
+            },
+        )
+
+        handler.setFormatter(formatter)
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+        return logger
 
 def extract_title_and_question(input_string):
     lines = input_string.strip().split("\n")

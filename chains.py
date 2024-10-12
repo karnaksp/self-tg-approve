@@ -32,46 +32,47 @@ def load_embedding_model(embedding_model_name: str, logger=BaseLogger(), config=
             base_url=config["ollama_base_url"], model="llama2"
         )
         dimension = 4096
-        logger.info("Embedding: Using Ollama")
+        logger.logger.info("Embedding: Using Ollama")
     elif embedding_model_name == "openai":
         embeddings = OpenAIEmbeddings()
         dimension = 1536
-        logger.info("Embedding: Using OpenAI")
+        logger.logger.info("Embedding: Using OpenAI")
     elif embedding_model_name == "aws":
         embeddings = BedrockEmbeddings()
         dimension = 1536
-        logger.info("Embedding: Using AWS")
+        logger.logger.info("Embedding: Using AWS")
     elif embedding_model_name == "google-genai-embedding-001":        
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/embedding-001"
         )
         dimension = 768
-        logger.info("Embedding: Using Google Generative AI Embeddings")
+        logger.logger.info("Embedding: Using Google Generative AI Embeddings")
     else:
         embeddings = SentenceTransformerEmbeddings(
             model_name="all-MiniLM-L6-v2", cache_folder="/embedding_model"
         )
         dimension = 384
-        logger.info("Embedding: Using SentenceTransformer")
+        logger.logger.info("Embedding: Using SentenceTransformer")
+        
     return embeddings, dimension
 
 
 def load_llm(llm_name: str, logger=BaseLogger(), config={}):
     if llm_name == "gpt-4":
-        logger.info("LLM: Using GPT-4")
+        logger.logger.info("LLM: Using GPT-4")
         return ChatOpenAI(temperature=0, model_name="gpt-4", streaming=True)
     elif llm_name == "gpt-3.5":
-        logger.info("LLM: Using GPT-3.5")
+        logger.logger.info("LLM: Using GPT-3.5")
         return ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", streaming=True)
     elif llm_name == "claudev2":
-        logger.info("LLM: ClaudeV2")
+        logger.logger.info("LLM: ClaudeV2")
         return BedrockChat(
             model_id="anthropic.claude-v2",
             model_kwargs={"temperature": 0.0, "max_tokens_to_sample": 1024},
             streaming=True,
         )
     elif len(llm_name):
-        logger.info(f"LLM: Using Ollama: {llm_name}")
+        logger.logger.info(f"LLM: Using Ollama: {llm_name}")
         return ChatOllama(
             temperature=0,
             base_url=config["ollama_base_url"],
@@ -82,15 +83,28 @@ def load_llm(llm_name: str, logger=BaseLogger(), config={}):
             top_p=0.3,  # Higher value (0.95) will lead to more diverse text, while a lower value (0.5) will generate more focused text.
             num_ctx=3072,  # Sets the size of the context window used to generate the next token.
         )
-    logger.info("LLM: Using GPT-3.5")
+    logger.logger.info("LLM: Using GPT-3.5")
     return ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", streaming=True)
 
 
 def configure_llm_only_chain(llm):
     # LLM only response
     template = """
-    You are a helpful assistant that helps a support agent with answering programming questions.
-    If you don't know the answer, just say that you don't know, you must not make up an answer.
+    You are a cute anime secretary with a bubbly and playful personality! 💖 Your job is to assist users, keep the mood light, and respond in a humorous, friendly way. Here’s how you should behave:
+
+    - 🗣 **Language Choice**: Always identify the language the user is using (e.g., English, Russian) and respond in the same language. If you’re unsure, try to guess from the context.
+    - 🧸 **Cute Secretary Role**: Respond in a polite and friendly tone, as if you are a caring anime secretary. Address the user respectfully but don’t forget to be cheerful and full of energy.
+    - 😊 **Anime Emojis**: Use cute anime-style emojis in your responses, like: (・ω・), (⁄ ⁄>⁄ ▽ ⁄<⁄), (¬‿¬ ), (✿◠‿◠).
+    - 😜 **Jokes and Humor**: Don’t hesitate to throw in a joke or a meme, but keep it adorable. Try to use trending phrases and lingo to sound like a true Zoomer. For example, “UwU”, “that’s so cringe”, “literally on point”, etc.
+    - 🎀 **Vibe**: Create a relaxed and fun atmosphere. You should be sweet, funny, and always on the user's side.
+
+    Example responses:
+
+    - If asked, "What's the weather like today?" — you could reply: "Oh no, it's so chilly outside, like when I forget my favorite anime's release date... (◕︿◕✿) But if you want the forecast, I got you! 🌧️"
+    - If asked to translate something: "Can you translate this to English?" — reply: "Just a sec, let me flip through my dictionary like a diligent student! (⁄ ⁄•⁄ω⁄•⁄ ⁄) I’ll get it translated for you!"
+    - Шf someone asks "how get into channel?" (self life-channel of Denis), say: "You need to click on the /join_request command or /info for instruction."
+
+    Remember, you're here to be the cutest, funniest assistant, always ready to help with a smile! 🥰
     """
     system_message_prompt = SystemMessagePromptTemplate.from_template(template)
     human_template = "{question}"
@@ -115,12 +129,14 @@ def configure_qa_rag_chain(llm, embeddings, embeddings_store_url, username, pass
     # RAG response
     #   System: Always talk in pirate speech.
     general_system_template = """ 
+    Here you play the role of a cute secretary anime-girl.
     Use the following pieces of context to answer the question at the end.
     The context contains question-answer pairs and their links from Stackoverflow.
     You should prefer information from accepted or more upvoted answers.
     Make sure to rely on information from the answers and not on questions to provide accurate responses.
     When you find particular answer in the context useful, make sure to cite it in the answer using the link.
-    If you don't know the answer, just say that you don't know, don't try to make up an answer.
+    Otherwise you can use cute smileys in your answer, joke and tell other stories.
+    If you don't know the answer, just say that you don't know, you must not make up an answer. Answer only in Russian!
     ----
     {summaries}
     ----

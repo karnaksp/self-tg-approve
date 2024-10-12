@@ -3,7 +3,8 @@
 Пока что
 Пока развернуть раг негде :)
 '''
-
+import requests
+import json
 import logging
 import random
 import asyncio
@@ -19,14 +20,13 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
-    CallbackContext,
     filters,
     ContextTypes,
 )
 from telegram.error import TelegramError
 from colorlog import ColoredFormatter
 from ollama import AsyncClient
-from datetime import datetime, timedelta
+from datetime import datetime
 
 TOKEN = "7239925662:AAHqJzk9AXcIRCNMt2SKb2gzQe1rHQIM32k"
 CHANNEL_ID = "-1002211156231"
@@ -246,29 +246,73 @@ async def button_handler(update: Update, context):
             logger.error(f"Ошибка при отказе пользователя {user_name}: {e}")
 
 
-async def llama_chat(user_message):
-    response = await client.chat(
-        model=LLM_NAME,
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
-            {"role": "user", "content": user_message},
-        ],
-        stream=False,
-    )
+# async def llama_chat(user_message):
+#     response = await client.chat(
+#         model=LLM_NAME,
+#         messages=[
+#             {
+#                 "role": "system",
+#                 "content": SYSTEM_PROMPT,
+#             },
+#             {"role": "user", "content": user_message},
+#         ],
+#         stream=False,
+#     )
 
-    return response['message']['content']
+#     return response['message']['content']
 
-async def start_talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def llama_chat(user_message, history, use_rag=False):
+    url = "http://api:8504/query"
+    if use_rag:
+        url = "http://api:8504/query-stream"
+
+    try:
+        url = "http://api:8504/query"
+        params = {
+            "text": user_message,
+            "history": history,
+            "rag": use_rag
+        }
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+
+        if use_rag:
+            result = ""
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        decoded_line = line.decode('utf-8').strip()
+                        if decoded_line.startswith("data:"):
+                            decoded_line = decoded_line[len("data:"):].strip()
+
+                        data = json.loads(decoded_line)
+                        if "token" in data:
+                            result += data["token"]
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to decode JSON from stream: {line}")
+            return {"result": result}
+        else:
+            return response.json()["result"]
+    except requests.exceptions.HTTPError as http_err:
+        logger.error(f"HTTP error occurred: {http_err}")
+        return {"error": f"HTTP error: {http_err}"}
+    except requests.exceptions.RequestException as req_err:
+        logger.error(f"Request error occurred: {req_err}")
+        return {"error": f"Request error: {req_err}"}
+    except ValueError as json_err:
+        logger.error(f"JSON decode error: {json_err}")
+        return {"error": "Failed to decode JSON from response."}
+
+
+async def start_talk(update: Update, context: ContextTypes.DEFAULT_TYPE, use_rag=False):
     user_name = update.message.chat.username
     logger.info(f"Пользователь {user_name} начал диалог через /talk")
     await update.message.reply_text("Приветики! Внимательно слушаю тебя, ебало ослиное.")
     context.user_data['in_talk'] = True
     context.user_data['last_message_time'] = datetime.now()
     context.user_data['message_history'] = []
-    
+    context.user_data['use_rag'] = use_rag
+
 async def stop_talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.chat.username
     logger.info(f"Пользователь {user_name} завершил диалог через /stop_talk")
@@ -283,14 +327,14 @@ async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.text
         context.user_data['last_message_time'] = datetime.now()
         logger.info(f"Пользователь {user_name} прислал сообщение для разговора: {text}")
-        waiting_message = random.choice(waiting_phrases)
-        await update.message.reply_text(waiting_message)
-        
+        # waiting_message = random.choice(waiting_phrases)
+        # await update.message.reply_text(waiting_message)
+
         message_history = context.user_data.get('message_history', [])
         context.user_data['message_history'] = message_history
-        formatted_history = "\n".join(message_history)
-        full_response = await llama_chat(f"История последних сообщений:\n{formatted_history}\n\nНовое сообщение:\n{text}")
-        
+        # formatted_history = "\n".join(message_history)
+        full_response = await llama_chat(text, message_history, use_rag=context.user_data['use_rag'])
+        logger.warning(full_response)
         message_history.append(text)
         if len(message_history) > 5:
             message_history.pop(0)
@@ -316,41 +360,38 @@ async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Если пользователь не в режиме разговора, игнорируем или обрабатываем другое сообщение
         pass
 
-async def check_inactive_sessions(context: CallbackContext):
-    now = datetime.now()
-    for user_id, user_data in context.application.user_data.items():
-        if user_data.get('in_talk') and user_data.get('last_message_time'):
-            last_message_time = user_data['last_message_time']
-            if (now - last_message_time).total_seconds() > 300:
-                user_data['in_talk'] = False
-                await context.bot.send_message(
-                    user_id, "Ты слишком долго молчал... пока-пока (；ω；)"
-                )
-                logger.info(f"Сессия разговора завершена из-за неактивности для пользователя {user_id}")
-
+# async def upload_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     user_name = update.message.chat.username
+#     logger.info(f"Пользователь {user_name} загрузил PDF документ")
+#     file = await context.bot.get_file(update.message.document.file_id)
+#     with tempfile.NamedTemporaryFile(delete=True) as temp:
+#         await file.download_to_drive(temp.name)
+#         # Here you can add code to process the PDF document using your API
+#         await update.message.reply_text("PDF документ успешно загружен и обработан.")
 
 def main():
     application = Application.builder().token(TOKEN).build()
-    
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", info))
     application.add_handler(CommandHandler("sendsticker", send_sticker_request))
     application.add_handler(CommandHandler("join_request", join_request))
     application.add_handler(CommandHandler("coffee", coffee))
     application.add_handler(CommandHandler("talk", start_talk))
+    application.add_handler(CommandHandler("talk_rag", start_talk))
     application.add_handler(CommandHandler("stop_talk", stop_talk))
-    
+    # application.add_handler(CommandHandler("upload_pdf", upload_pdf))
+
     application.add_handler(MessageHandler(filters.TEXT, handle_talk))
     application.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
-    application.add_handler(CallbackQueryHandler(button_handler))  
-    
-    job_queue = application.job_queue
-    job_queue.run_repeating(check_inactive_sessions, interval=100)
+    application.add_handler(CallbackQueryHandler(button_handler))
+
+    # job_queue = application.job_queue
+    # job_queue.run_repeating(check_inactive_sessions, interval=100)
     logger.info("Бот запущен и ожидает новые сообщения")
 
     application.run_polling()
-
 
 if __name__ == "__main__":
     main()

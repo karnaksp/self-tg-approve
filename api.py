@@ -13,7 +13,7 @@ from chains import (
     configure_qa_rag_chain,
     generate_ticket,
 )
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Query
 from pydantic import BaseModel
 from langchain.callbacks.base import BaseCallbackHandler
 from threading import Thread
@@ -22,6 +22,7 @@ from collections.abc import Generator
 from sse_starlette.sse import EventSourceResponse
 from fastapi.middleware.cors import CORSMiddleware
 import json
+from typing import Optional
 
 load_dotenv(".env")
 
@@ -110,6 +111,7 @@ async def root():
 
 class Question(BaseModel):
     text: str
+    history: str = []
     rag: bool = False
 
 
@@ -118,16 +120,14 @@ class BaseTicket(BaseModel):
 
 
 @app.get("/query-stream")
-def qstream(question: Question = Depends()):
-    output_function = llm_chain
-    if question.rag:
-        output_function = rag_chain
+def qstream(text: str = Query(...), history: Optional[str] = None, rag: bool = False):
+    output_function = llm_chain if not rag else rag_chain
 
     q = Queue()
 
     def cb():
         output_function(
-            {"question": question.text, "chat_history": []},
+            {"question": text, "chat_history": history},
             callbacks=[QueueCallback(q)],
         )
 
@@ -140,13 +140,9 @@ def qstream(question: Question = Depends()):
 
 
 @app.get("/query")
-async def ask(question: Question = Depends()):
-    output_function = llm_chain
-    if question.rag:
-        output_function = rag_chain
-    result = output_function(
-        {"question": question.text, "chat_history": []}, callbacks=[]
-    )
+async def ask(text: str = Query(...), history: Optional[str] = None, rag: bool = False):
+    output_function = llm_chain if not rag else rag_chain
+    result = output_function({"question": text, "chat_history": history}, callbacks=[])
 
     return {"result": result["answer"], "model": llm_name}
 

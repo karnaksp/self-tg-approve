@@ -9,9 +9,7 @@ COPY main.py .
 RUN python -m pip install --upgrade pip
 
 RUN apt-get update && \
-    apt-get install -y make && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y make
 
 CMD ["make"]
 
