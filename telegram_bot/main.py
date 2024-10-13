@@ -335,12 +335,12 @@ async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # formatted_history = "\n".join(message_history)
         full_response = await llama_chat(text, message_history, use_rag=context.user_data['use_rag'])
         ck_response = f"assistant: {full_response}"
-        user_replic = f"question: {text}"
+        # user_replic = f"question: {text}"
         logger.warning(ck_response)
-        message_history.append("\n".join([user_replic, ck_response]))
-        if len(message_history) > 5:
-            message_history.pop(0)
-        context.user_data['message_history'] = message_history
+        # message_history.append("\n".join([user_replic, ck_response]))
+        # if len(message_history) > 5:
+        #     message_history.pop(0)
+        # context.user_data['message_history'] = message_history
         words = full_response.split()
         message_parts = []
         chunk = []

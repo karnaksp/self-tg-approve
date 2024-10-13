@@ -5,11 +5,6 @@ services:
     image: ollama/ollama:latest
     networks:
       - net
-    # healthcheck:
-    #   test: ["CMD-SHELL", "curl -f http://localhost:11434/ || exit 1"]
-    #   interval: 15s
-    #   timeout: 30s
-    #   retries: 10
     environment:
       - OLLAMA_BASE_URL=http://localhost:11434
     ports:
@@ -30,7 +25,6 @@ services:
     tty: true
     depends_on:
       - llm
-  # entrypoint: ["/wait-for-it.sh", "llm:11434", "--", "your-entrypoint-command"]
   
   db:
     image: neo4j:5.11
@@ -90,80 +84,6 @@ services:
       - 8081:8080
       - 8502:8502
 
-  bot:
-    build:
-      context: .
-      dockerfile: bot.Dockerfile
-    volumes:
-      - $PWD/embedding_model:/embedding_model
-    env_file:
-      - .env
-    environment:
-      - URI=${URI}
-      - PASSWORD=${PASSWORD}
-      - USERNAME=${USERNAME}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
-      - LLM=${LLM-llama3}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
-    networks:
-      - net
-    depends_on:
-      db:
-        condition: service_healthy
-      pull-model:
-        condition: service_completed_successfully
-    ports:
-      - 8501:8501
-
-
-  pdf_bot:
-    build:
-      context: .
-      dockerfile: pdf_bot.Dockerfile
-    environment:
-      - URI=${URI}
-      - PASSWORD=${PASSWORD}
-      - USERNAME=${USERNAME}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
-      - LLM=${LLM}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
-    networks:
-      - net
-    depends_on:
-      db:
-        condition: service_healthy
-      pull-model:
-        condition: service_completed_successfully
-    x-develop:
-      watch:
-        - action: rebuild
-          path: .
-          ignore:
-            - loader.py
-            - bot.py
-            - api.py
-            - front-end/
-    ports:
-      - 8503:8503
-
   api:
     build:
       context: .
@@ -209,18 +129,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
-  front-end:
-    build:
-      context: .
-      dockerfile: front-end.Dockerfile
-    networks:
-      - net
-    ports:
-      - 8505:8505
-    depends_on:
-      api:
-        condition: service_healthy
 
   telegram_bot:
     build:
