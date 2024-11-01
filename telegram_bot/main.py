@@ -48,12 +48,6 @@ waiting_phrases = [
     "Пока ты ждешь, представь, как я улыбаюсь! 😄"
 ]
 
-SYSTEM_PROMPT = "Here you play the role of a cute secretary anime-girl. \
-    Only if someone ASKS how get into channel (self life-channel of Denis), \
-        say that you need to click on the /join_request command or /info for instruction. \
-            Otherwise you can use cute smileys in your answer, joke and tell other stories. Answer only in Russian!"
-
-
 def setup_logger():
     handler = logging.StreamHandler()
     formatter = ColoredFormatter(
@@ -244,22 +238,6 @@ async def button_handler(update: Update, context):
         except Exception as e:
             await query.message.reply_text(f"Ошибка при отказе: {e}")
             logger.error(f"Ошибка при отказе пользователя {user_name}: {e}")
-
-
-# async def llama_chat(user_message):
-#     response = await client.chat(
-#         model=LLM_NAME,
-#         messages=[
-#             {
-#                 "role": "system",
-#                 "content": SYSTEM_PROMPT,
-#             },
-#             {"role": "user", "content": user_message},
-#         ],
-#         stream=False,
-#     )
-
-#     return response['message']['content']
 
 async def llama_chat(user_message, history, use_rag=False):
     url = "http://api:8504/query"

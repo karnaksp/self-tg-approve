@@ -111,8 +111,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      pull-model:
-        condition: service_completed_successfully
     x-develop:
       watch:
         - action: rebuild
@@ -120,8 +118,6 @@ services:
           ignore:
             - loader.py
             - bot.py
-            - pdf_bot.py
-            - front-end/
     ports:
       - 8504:8504
     healthcheck:
