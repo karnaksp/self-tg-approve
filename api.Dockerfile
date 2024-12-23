@@ -18,4 +18,4 @@ COPY chains.py .
 
 HEALTHCHECK CMD curl --fail http://localhost:8504
 
-ENTRYPOINT [ "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8504" ]
+ENTRYPOINT [ "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8504", "--log-level", "warning" ]
