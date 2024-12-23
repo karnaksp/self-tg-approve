@@ -25,92 +25,23 @@ services:
     tty: true
     depends_on:
       - llm
-  
-  db:
-    image: neo4j:5.11
-    ports:
-      - 7687:7687
-      - 7474:7474
-    env_file:
-      - .env
-    environment:
-      - NEO4J_AUTH=${USERNAME}/${PASSWORD}
-      - NEO4J_PLUGINS=["apoc"]
-      - NEO4J_db_tx__log_rotation_retention__policy=false
-      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
-      - NEO4J_dbms_security_procedures_allowlist=apoc.meta.data
-      - NEO4J_apoc_import_file_use__neo4j__config=true
-      - NEO4J_apoc_export_file_enabled=true
-      - NEO4J_apoc_import_file_enabled=true
-    healthcheck:
-      test: ["CMD-SHELL", "wget --verbose --tries=1 --spider localhost:7474 || exit 1"]
-      interval: 15s
-      timeout: 30s
-      retries: 10
-    networks:
-      - net
-
-  loader:
-    build:
-      context: .
-      dockerfile: loader.Dockerfile
-    volumes:
-      - $PWD/embedding_model:/embedding_model
-    env_file:
-      - .env
-    environment:
-      - URI=${URI}
-      - PASSWORD=${PASSWORD}
-      - USERNAME=${USERNAME}
-      - OPENAI_API_KEY=${OPENAI_API_KEY-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2-false}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
-    networks:
-      - net
-    depends_on:
-      db:
-        condition: service_healthy
-      pull-model:
-        condition: service_completed_successfully
-    ports:
-      - 8081:8080
-      - 8502:8502
 
   api:
     build:
       context: .
       dockerfile: api.Dockerfile
-    volumes:
-      - $PWD/embedding_model:/embedding_model
     environment:
-      - URI=${URI}
-      - PASSWORD=${PASSWORD}
-      - USERNAME=${USERNAME}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}  
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
       - LLM=${LLM}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
     networks:
       - net
     depends_on:
-      db:
-        condition: service_healthy
+      pull-model:
+        condition: service_completed_successfully
     x-develop:
       watch:
         - action: rebuild
@@ -122,8 +53,8 @@ services:
       - 8504:8504
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 http://localhost:8504/ || exit 1"]
-      interval: 5s
-      timeout: 3s
+      interval: 15s
+      timeout: 30s
       retries: 5
 
   telegram_bot:
@@ -150,4 +81,5 @@ services:
 
 networks:
   net:
+    name: net
     driver: bridge

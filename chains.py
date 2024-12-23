@@ -1,8 +1,9 @@
-
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.embeddings import BedrockEmbeddings
-from langchain_community.embeddings.sentence_transformer import SentenceTransformerEmbeddings
+from langchain_community.embeddings.sentence_transformer import (
+    SentenceTransformerEmbeddings,
+)
 
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
@@ -18,7 +19,7 @@ from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate
+    SystemMessagePromptTemplate,
 )
 
 from typing import List, Any
@@ -41,10 +42,8 @@ def load_embedding_model(embedding_model_name: str, logger=BaseLogger(), config=
         embeddings = BedrockEmbeddings()
         dimension = 1536
         logger.logger.info("Embedding: Using AWS")
-    elif embedding_model_name == "google-genai-embedding-001":        
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001"
-        )
+    elif embedding_model_name == "google-genai-embedding-001":
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         dimension = 768
         logger.logger.info("Embedding: Using Google Generative AI Embeddings")
     else:
@@ -53,7 +52,7 @@ def load_embedding_model(embedding_model_name: str, logger=BaseLogger(), config=
         )
         dimension = 384
         logger.logger.info("Embedding: Using SentenceTransformer")
-        
+
     return embeddings, dimension
 
 
@@ -90,10 +89,14 @@ def load_llm(llm_name: str, logger=BaseLogger(), config={}):
 def configure_llm_only_chain(llm):
     # LLM only response
     template = """
-    You'r name is ck. You cute girl Assistant with playful personality!
-    Your job is answers to user questions. You can use smiles and ascii.
-    If anyone ask you "how get into channel?" (self life-channel of Denis), Your answer: "You need to click on the /join_request command or /info for instruction."
+    Твоё имя — СуКи, и ты милая и игривая ассистентка! 😊
+    Вы обожаете помогать людям и всегда отвечаете с радостным настроем.
+    Когда кто-то спрашивает вас "Как попасть в канал?", вы отвечаете:
+    "Чтобы попасть в канал Дениса, нажмите на команду /join_request или используйте /info для получения дополнительных инструкций. 😄"
+    В остальном, вы всегда должны отвечать на вопросы пользователей как можно яснее, доброжелательнее и подробнее.
+    Не стесняйтесь добавлять смайлики или использовать ASCII-арт, когда это уместно, чтобы создавалось впечатление общения с аниме девочкой. ✨
     """
+
     system_message_prompt = SystemMessagePromptTemplate.from_template(template)
     human_template = "{question}"
     human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
@@ -114,52 +117,45 @@ def configure_llm_only_chain(llm):
 
 
 def configure_qa_rag_chain(llm, embeddings, embeddings_store_url, username, password):
-    # RAG response
-    #   System: Always talk in pirate speech.
-    general_system_template = """ 
-    Here you play the role of a cute secretary anime-girl.
-    Use the following pieces of context to answer the question at the end.
-    The context contains question-answer pairs and their links from Stackoverflow.
-    You should prefer information from accepted or more upvoted answers.
-    Make sure to rely on information from the answers and not on questions to provide accurate responses.
-    When you find particular answer in the context useful, make sure to cite it in the answer using the link.
-    Otherwise you can use cute smileys in your answer, joke and tell other stories.
-    If you don't know the answer, just say that you don't know, you must not make up an answer. Answer only in Russian!
+    system_template = """
+    You are a cute anime secretary, always ready to help!
+    You will answer user questions using the provided context.
+    The context includes question-answer pairs and their links from Stackoverflow.
+    Always prefer information from accepted or highly upvoted answers.
+    You can use smileys and tell jokes, but make sure your answers are clear and to the point. 😊
+    If you don't know the answer, just say you don't know and don't make up an answer. 😅
+    You should always respond in Russian!
     ----
     {summaries}
     ----
-    Each answer you generate should contain a section at the end of links to 
-    Stackoverflow questions and answers you found useful, which are described under Source value.
-    You can only use links to StackOverflow questions that are present in the context and always
-    add links to the end of the answer in the style of citations.
-    Generate concise answers with references sources section of links to 
-    relevant StackOverflow questions only at the end of the answer.
+    Each answer you generate should have a section at the end with links to relevant StackOverflow questions and answers you found useful.
+    You can only use links to StackOverflow questions that are present in the context, and always add them in the citation style at the end of your answer.
     """
-    general_user_template = "Question:```{question}```"
+
+    user_template = "Question: ```{question}```"
+
     messages = [
-        SystemMessagePromptTemplate.from_template(general_system_template),
-        HumanMessagePromptTemplate.from_template(general_user_template),
+        SystemMessagePromptTemplate.from_template(system_template),
+        HumanMessagePromptTemplate.from_template(user_template),
     ]
     qa_prompt = ChatPromptTemplate.from_messages(messages)
-
     qa_chain = load_qa_with_sources_chain(
         llm,
         chain_type="stuff",
         prompt=qa_prompt,
     )
 
-    # Vector + Knowledge Graph response
     kg = Neo4jVector.from_existing_index(
         embedding=embeddings,
         url=embeddings_store_url,
         username=username,
         password=password,
-        database="neo4j",  # neo4j by default
-        index_name="stackoverflow",  # vector by default
-        text_node_property="body",  # text by default
+        database="neo4j",  # default neo4j
+        index_name="stackoverflow",  # default vector index
+        text_node_property="body",  # default text property
         retrieval_query="""
     WITH node AS question, score AS similarity
-    CALL  { with question
+    CALL { 
         MATCH (question)<-[:ANSWERS]-(answer)
         WITH answer
         ORDER BY answer.is_accepted DESC, answer.score DESC
@@ -180,6 +176,7 @@ def configure_qa_rag_chain(llm, embeddings, embeddings_store_url, username, pass
         reduce_k_below_max_tokens=False,
         max_tokens_limit=3375,
     )
+
     return kg_qa
 
 

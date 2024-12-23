@@ -1,7 +1,7 @@
 REQUIREMENTS_FILE = ./requirements.txt
 VENV_DIR = myenv
 
-.PHONY: all create_venv start_bot
+.PHONY: all create_venv start_bot pep8 pylint sort check_lint
 
 all: create_venv start_bot
 
@@ -16,3 +16,15 @@ start_bot:
 
 clean:
 	@bash -c "rm -rf *.tgz myenv __pycache__"
+
+pep8:
+	autopep8 --in-place --recursive --aggressive *.py
+
+pylint:
+	pylint --disable=c-extension-no-member --fail-under=9.0 --output-format=colorized *.py
+
+sort:
+	isort .
+
+check_lint: pep8 sort pylint
+

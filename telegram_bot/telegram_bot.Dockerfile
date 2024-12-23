@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 COPY Makefile .
-COPY main.py .
+COPY *.py .
 
 RUN python -m pip install --upgrade pip
 

@@ -1,5 +1,8 @@
 colorlog
 requests
+isort
+pylint
 python-telegram-bot
 python-telegram-bot[job-queue]
 ollama
+python-dotenv
