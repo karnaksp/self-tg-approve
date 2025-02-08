@@ -100,7 +100,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = query.data.split("_")[1]
-    user_name = update.effective_user.username
+    user_name = update.message.chat.username
 
     if "approve" in query.data:
         logger.info(f"Обрабатывается одобрение запроса пользователя {user_name}")

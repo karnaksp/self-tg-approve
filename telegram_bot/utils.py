@@ -67,8 +67,8 @@ async def send_chunked_response(
             full_response = str(full_response)
         else:
             logger.error("Неправильный формат данных. Ожидалась строка.")
-
-    words = full_response.split()
+    non_think_response = full_response.split("</think>")[-1]
+    words = non_think_response.split()
     message_parts = []
     chunk = []
     total_words = 0
