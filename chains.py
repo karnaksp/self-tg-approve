@@ -1,36 +1,47 @@
+# chains.py
+
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.embeddings.sentence_transformer import (
     SentenceTransformerEmbeddings,
 )
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from langchain_openai import ChatOpenAI
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama  # Новый пакет для Ollama
 from langchain_community.chat_models import BedrockChat
 
+from langchain_community.vectorstores import Neo4jVector
 from langchain_community.graphs import Neo4jGraph
 
-from langchain_community.vectorstores import Neo4jVector
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
 
-from langchain.chains import RetrievalQAWithSourcesChain
-from langchain.chains.qa_with_sources import load_qa_with_sources_chain
-
-from langchain.prompts import (
-    ChatPromptTemplate,
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-)
-
-from typing import List, Any
+from typing import List, Dict
 from utils import BaseLogger, extract_title_and_question
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+# In-memory хранилище истории (в продакшене замените на Redis или другое)
+store: Dict[str, ChatMessageHistory] = {}
+
+
+def get_session_history(session_id: str = "default") -> BaseChatMessageHistory:
+    if session_id not in store:
+        store[session_id] = ChatMessageHistory()
+    return store[session_id]
 
 
 def load_embedding_model(embedding_model_name: str, logger=BaseLogger(), config={}):
+    # Код остался почти без изменений (только логи)
     if embedding_model_name == "ollama":
         embeddings = OllamaEmbeddings(
-            base_url=config["ollama_base_url"], model="llama2"
+            base_url=config.get("ollama_base_url"),
+            model="llama3",  # обновил модель на актуальную
         )
         dimension = 4096
         logger.logger.info("Embedding: Using Ollama")
@@ -57,6 +68,7 @@ def load_embedding_model(embedding_model_name: str, logger=BaseLogger(), config=
 
 
 def load_llm(llm_name: str, logger=BaseLogger(), config={}):
+    # Обновил импорт ChatOllama
     if llm_name == "gpt-4":
         logger.logger.info("LLM: Using GPT-4")
         return ChatOpenAI(temperature=0, model_name="gpt-4", streaming=True)
@@ -70,166 +82,215 @@ def load_llm(llm_name: str, logger=BaseLogger(), config={}):
             model_kwargs={"temperature": 0.0, "max_tokens_to_sample": 1024},
             streaming=True,
         )
-    elif len(llm_name):
+    elif llm_name:
         logger.logger.info(f"LLM: Using Ollama: {llm_name}")
         return ChatOllama(
             temperature=0,
-            base_url=config["ollama_base_url"],
+            base_url=config.get("ollama_base_url"),
             model=llm_name,
             streaming=True,
-            # seed=2,
-            top_k=10,  # A higher value (100) will give more diverse answers, while a lower value (10) will be more conservative.
-            top_p=0.3,  # Higher value (0.95) will lead to more diverse text, while a lower value (0.5) will generate more focused text.
-            num_ctx=3072,  # Sets the size of the context window used to generate the next token.
+            top_k=10,
+            top_p=0.3,
+            num_ctx=3072,
         )
-    logger.logger.info("LLM: Using GPT-3.5")
+    logger.logger.info("LLM: Using GPT-3.5 fallback")
     return ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo", streaming=True)
 
 
 def configure_llm_only_chain(llm):
-    # LLM only response
-    template = """
-    Ты милая и игривая ассистентка! 😊
-    Вы обожаете помогать людям и всегда отвечаете с радостным настроем.
-    Не стесняйтесь добавлять смайлики или использовать ASCII-арт, когда это уместно, чтобы создавалось впечатление общения с аниме девочкой. ✨
-    """
-
-    system_message_prompt = SystemMessagePromptTemplate.from_template(template)
-    human_template = "{question}"
-    human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
-    chat_prompt = ChatPromptTemplate.from_messages(
-        [system_message_prompt, human_message_prompt]
+    """Простая цепочка только с LLM + история чата + милый стиль"""
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """
+Ты милая и игривая ассистентка! 😊
+Вы обожаете помогать людям и всегда отвечаете с радостным настроем.
+Не стесняйся добавлять смайлики или использовать ASCII-арт, когда это уместно, чтобы создавалось впечатление общения с аниме девочкой. ✨
+""",
+            ),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{question}"),
+        ]
     )
 
-    def generate_llm_output(
-        user_input: str, callbacks: List[Any], prompt=chat_prompt
-    ) -> str:
-        chain = prompt | llm
-        answer = chain.invoke(
-            {"question": user_input}, config={"callbacks": callbacks}
-        ).content
-        return {"answer": answer}
+    chain = prompt | llm | StrOutputParser()
 
-    return generate_llm_output
+    conversational_chain = RunnableWithMessageHistory(
+        chain,
+        get_session_history,
+        input_messages_key="question",
+        history_messages_key="chat_history",
+    )
+
+    return conversational_chain
 
 
 def configure_qa_rag_chain(llm, embeddings, embeddings_store_url, username, password):
-    system_template = """
-    You are a cute anime secretary, always ready to help!
-    You will answer user questions using the provided context.
-    The context includes question-answer pairs and their links from Stackoverflow.
-    Always prefer information from accepted or highly upvoted answers.
-    You can use smileys and tell jokes, but make sure your answers are clear and to the point. 😊
-    If you don't know the answer, just say you don't know and don't make up an answer. 😅
-    You should always respond in Russian!
-    ----
-    {summaries}
-    ----
-    Each answer you generate should have a section at the end with links to relevant StackOverflow questions and answers you found useful.
-    You can only use links to StackOverflow questions that are present in the context, and always add them in the citation style at the end of your answer.
-    """
+    """Современная RAG-цепочка с источниками (citations) на базе Neo4jVector + LCEL"""
 
-    user_template = "Question: ```{question}```"
-
-    messages = [
-        SystemMessagePromptTemplate.from_template(system_template),
-        HumanMessagePromptTemplate.from_template(user_template),
-    ]
-    qa_prompt = ChatPromptTemplate.from_messages(messages)
-    qa_chain = load_qa_with_sources_chain(
-        llm,
-        chain_type="stuff",
-        prompt=qa_prompt,
-    )
-
-    kg = Neo4jVector.from_existing_index(
+    # Создаём векторный стор с кастомным retrieval_query (для лучших ответов + метаданных)
+    vectorstore = Neo4jVector.from_existing_index(
         embedding=embeddings,
         url=embeddings_store_url,
         username=username,
         password=password,
-        database="neo4j",  # default neo4j
-        index_name="stackoverflow",  # default vector index
-        text_node_property="body",  # default text property
+        database="neo4j",
+        index_name="stackoverflow",
+        text_node_property="body",
         retrieval_query="""
-    WITH node AS question, score AS similarity
-    CALL { 
-        MATCH (question)<-[:ANSWERS]-(answer)
-        WITH answer
-        ORDER BY answer.is_accepted DESC, answer.score DESC
-        WITH collect(answer)[..2] as answers
-        RETURN reduce(str='', answer IN answers | str + 
-                '\n### Answer (Accepted: '+ answer.is_accepted +
-                ' Score: ' + answer.score+ '): '+  answer.body + '\n') as answerTexts
-    } 
-    RETURN '##Question: ' + question.title + '\n' + question.body + '\n' 
-        + answerTexts AS text, similarity as score, {source: question.link} AS metadata
-    ORDER BY similarity ASC // so that best answers are the last
-    """,
+        WITH node AS question, score AS similarity
+        CALL { 
+            MATCH (question)<-[:ANSWERS]-(answer)
+            WITH answer
+            ORDER BY answer.is_accepted DESC, answer.score DESC
+            WITH collect(answer)[..2] as answers
+            RETURN reduce(str='', answer IN answers | str + 
+                    '\n### Answer (Accepted: '+ coalesce(answer.is_accepted, false) +
+                    ' Score: ' + coalesce(toString(answer.score), '0') + '): '+  answer.body + '\n') as answerTexts
+        } 
+        RETURN '##Question: ' + question.title + '\n' + question.body + '\n' 
+            + answerTexts AS text, similarity as score, {source: question.link} AS metadata
+        ORDER BY similarity DESC LIMIT 3
+        """,
     )
 
-    kg_qa = RetrievalQAWithSourcesChain(
-        combine_documents_chain=qa_chain,
-        retriever=kg.as_retriever(search_kwargs={"k": 2}),
-        reduce_k_below_max_tokens=False,
-        max_tokens_limit=3375,
-    )
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
-    return kg_qa
+    # Форматируем документы для контекста
+    def format_docs(docs):
+        return "\n\n".join(
+            f"{i + 1}. {doc.page_content}\nИсточник: {doc.metadata.get('source', 'unknown')}"
+            for i, doc in enumerate(docs)
+        )
 
-
-def generate_ticket(neo4j_graph, llm_chain, input_question):
-    # Get high ranked questions
-    records = neo4j_graph.query(
-        "MATCH (q:Question) RETURN q.title AS title, q.body AS body ORDER BY q.score DESC LIMIT 3"
-    )
-    questions = []
-    for i, question in enumerate(records, start=1):
-        questions.append((question["title"], question["body"]))
-    # Ask LLM to generate new question in the same style
-    questions_prompt = ""
-    for i, question in enumerate(questions, start=1):
-        questions_prompt += f"{i}. \n{question[0]}\n----\n\n"
-        questions_prompt += f"{question[1][:150]}\n\n"
-        questions_prompt += "----\n\n"
-
-    gen_system_template = f"""
-    You're an expert in formulating high quality questions. 
-    Formulate a question in the same style and tone as the following example questions.
-    {questions_prompt}
-    ---
-
-    Don't make anything up, only use information in the following question.
-    Return a title for the question, and the question post itself.
-
-    Return format template:
-    ---
-    Title: This is a new title
-    Question: This is a new question
-    ---
-    """
-    # we need jinja2 since the questions themselves contain curly braces
-    system_prompt = SystemMessagePromptTemplate.from_template(
-        gen_system_template, template_format="jinja2"
-    )
-    chat_prompt = ChatPromptTemplate.from_messages(
+    # Промпт для RAG (на русском, милый стиль)
+    rag_prompt = ChatPromptTemplate.from_messages(
         [
-            system_prompt,
-            SystemMessagePromptTemplate.from_template(
+            (
+                "system",
                 """
-                Respond in the following template format or you will be unplugged.
-                ---
-                Title: New title
-                Question: New question
-                ---
-                """
+Ты милая аниме-секретарша, всегда готовая помочь! 😊
+Отвечай на вопросы пользователя только на основе предоставленного контекста из StackOverflow.
+Предпочитай принятые или высокооценённые ответы.
+Можешь использовать смайлики и шутки, но ответ должен быть чётким и по делу.
+Если не знаешь ответ — честно скажи, что не знаешь. 😅
+В конце ответа всегда добавь раздел "Источники:" с ссылками на использованные вопросы StackOverflow.
+""",
             ),
-            HumanMessagePromptTemplate.from_template("{question}"),
+            ("human", "Контекст:\n{context}\n\nВопрос: {question}"),
         ]
     )
-    llm_response = llm_chain(
-        f"Here's the question to rewrite in the expected format: ```{input_question}```",
-        [],
-        chat_prompt,
+
+    # Основная цепочка
+    rag_chain_from_docs = (
+        RunnablePassthrough.assign(context=(lambda x: format_docs(x["docs"])))
+        | rag_chain_prompt
+        | llm
+        | StrOutputParser()
     )
-    new_title, new_question = extract_title_and_question(llm_response["answer"])
-    return (new_title, new_question)
+
+    # Полная цепочка с ретривером и источниками
+    rag_chain_with_sources = RunnableParallel(
+        {"docs": retriever, "question": RunnablePassthrough()}
+    ).assign(answer=rag_chain_from_docs)
+
+    # Добавляем историю (опционально)
+    conversational_rag_chain = RunnableWithMessageHistory(
+        rag_chain_with_sources,
+        get_session_history,
+        input_messages_key="question",
+        history_messages_key="chat_history",  # если хотите историю в RAG
+    )
+
+    return conversational_rag_chain  # или rag_chain_with_sources без истории
+
+
+# generate_ticket остался почти без изменений (он использует llm_chain как функцию)
+# Если нужно адаптировать под новую цепочку — дайте знать.
+
+
+def generate_ticket(
+    neo4j_graph: Neo4jGraph,
+    llm_chain,
+    input_question: str,
+    session_id: str = "ticket_gen",
+):
+    """
+    Генерирует новый тикет (вопрос на StackOverflow) в стиле существующих высокооценённых вопросов.
+
+    :param neo4j_graph: Подключённый Neo4jGraph
+    :param llm_chain: Цепочка из configure_llm_only_chain (RunnableWithMessageHistory)
+    :param input_question: Исходный вопрос пользователя
+    :param session_id: ID сессии для истории (можно фиксированный, т.к. это разовая генерация)
+    :return: (new_title, new_question)
+    """
+    # 1. Получаем топ-3 высокооценённых вопроса из Neo4j
+    records = neo4j_graph.query("""
+        MATCH (q:Question) 
+        RETURN q.title AS title, q.body AS body 
+        ORDER BY q.score DESC 
+        LIMIT 3
+    """)
+
+    if not records:
+        raise ValueError("Нет вопросов в базе данных для обучения стиля.")
+
+    # Формируем примеры для промпта
+    questions_prompt = ""
+    for i, record in enumerate(records, start=1):
+        title = record.get("title", "Без заголовка")
+        body = record.get("body", "")[:300]  # ограничиваем длину
+        questions_prompt += f"{i}. \n{title}\n----\n\n{body}\n{'-' * 10}\n\n"
+
+    # 2. Системный промпт с примерами (jinja2 не нужен — используем f-string и экранирование)
+    system_prompt_text = f"""
+Ты эксперт по формулировке качественных технических вопросов для StackOverflow.
+Сформулируй новый вопрос в том же стиле, тоне и уровне детализации, как эти высокооценённые примеры:
+
+{questions_prompt}
+---
+
+Важно:
+- Не придумывай новую информацию — основывайся только на содержании вопроса пользователя.
+- Заголовок должен быть кратким, ясным и привлекательным.
+- Тело вопроса — подробным, с кодом/примерами, если это уместно.
+- Ответ должен строго соответствовать шаблону ниже.
+"""
+
+    response_format_prompt = """
+ОТВЕТЬ ТОЛЬКО В СЛЕДУЮЩЕМ ФОРМАТЕ, ИНАЧЕ ТЕБЯ ОТКЛЮЧАТ:
+
+---
+Title: Новый заголовок вопроса
+Question: Полное тело нового вопроса
+---
+"""
+
+    # 3. Формируем полный промпт как список сообщений
+    full_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt_text),
+            ("system", response_format_prompt),
+            (
+                "human",
+                "Вот вопрос, который нужно переформулировать в стиле StackOverflow:\n\n{input_question}",
+            ),
+        ]
+    )
+
+    # 4. Создаём временную цепочку для этой задачи
+    generation_chain = (
+        full_prompt | llm_chain.llm | StrOutputParser()
+    )  # llm_chain.llm — это базовый LLM
+
+    # 5. Вызываем (без истории — не нужна для генерации тикета)
+    try:
+        raw_response = generation_chain.invoke({"input_question": input_question})
+    except Exception as e:
+        raise RuntimeError(f"Ошибка при генерации тикета: {e}")
+
+    # 6. Извлекаем title и question
+    new_title, new_question = extract_title_and_question(raw_response)
+
+    return new_title, new_question

@@ -52,7 +52,7 @@ async def llama_chat(
         return response.json().get("result")
     except (requests.exceptions.HTTPError, requests.exceptions.RequestException) as err:
         logger.error(f"Request error occurred: {err}")
-        return f"Черт. Ты меня положил..."
+        return "Черт. Ты меня положил..."
     except ValueError as json_err:
         logger.error(f"JSON decode error: {json_err}")
         return {"error": "Failed to decode JSON from response."}

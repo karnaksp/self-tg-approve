@@ -1,14 +1,18 @@
+version: "3.8"
 
 services:
-
   llm:
     image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama   # сохраняем модели и настройки
+    ports:
+      - "11434:11434"              # REST API порт
+    command: ["serve"]              # запускаем Ollama сервер
     networks:
       - net
-    environment:
-      - OLLAMA_BASE_URL=http://localhost:11434
-    ports:
-      - 11434:11434
+
 
   pull-model:
     image: genai-stack/pull-model:latest
@@ -18,44 +22,32 @@ services:
     env_file:
       - .env
     environment:
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_BASE_URL=http://llm:11434   # обращаемся к сервису по имени контейнера
       - LLM=${LLM}
     networks:
       - net
-    tty: true
     depends_on:
       - llm
+    tty: true
 
   api:
     build:
       context: .
       dockerfile: api.Dockerfile
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}  
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_BASE_URL=http://llm:11434
       - LLM=${LLM}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
     networks:
       - net
     depends_on:
-      pull-model:
-        condition: service_completed_successfully
-    x-develop:
-      watch:
-        - action: rebuild
-          path: .
-          ignore:
-            - loader.py
-            - bot.py
+      - pull-model
     ports:
-      - 8504:8504
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 http://localhost:8504/ || exit 1"]
-      interval: 15s
-      timeout: 30s
-      retries: 5
+      - "8504:8504"
 
   telegram_bot:
     build:
@@ -64,20 +56,20 @@ services:
     env_file:
       - .env
     environment:
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_BASE_URL=http://llm:11434
       - LLM=${LLM}
+      - CHANNEL_ID=${CHANNEL_ID}
+      - ADMIN_ID=${ADMIN_ID}
+      - TOKEN=${TOKEN}
     networks:
       - net
     ports:
-      - 8506:8506
-    healthcheck:
-      test: ["CMD-SHELL", "curl --fail http://localhost:8506/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - "8506:8506"
     depends_on:
-      pull-model:
-        condition: service_completed_successfully
+      - pull-model
+
+volumes:
+  ollama_data:
 
 networks:
   net:

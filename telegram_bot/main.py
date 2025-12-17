@@ -20,7 +20,13 @@ from commands import (
     start_talk,
     stop_talk,
 )
-from handlers import button_handler, handle_message, handle_sticker, handle_talk
+from handlers import (
+    button_handler,
+    handle_message,
+    handle_sticker,
+    handle_talk,
+    conv_handler,
+)
 
 
 def main():
@@ -38,6 +44,7 @@ def main():
     application.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
     application.add_handler(MessageHandler(None, handle_message))
     application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(conv_handler)
 
     # job_queue = application.job_queue
     # job_queue.run_repeating(check_inactive_sessions, interval=100)

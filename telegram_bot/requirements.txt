@@ -6,3 +6,7 @@ python-telegram-bot
 python-telegram-bot[job-queue]
 ollama
 python-dotenv
+apimoex
+pandas
+matplotlib
+moviepy
