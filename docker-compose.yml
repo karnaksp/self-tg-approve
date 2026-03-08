@@ -101,10 +101,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U $${POSTGRES_USER} -d $${POSTGRES_DB} || exit 1']
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
   n8n-import:
     <<: *service-n8n

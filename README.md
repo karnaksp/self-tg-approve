@@ -92,9 +92,11 @@ winget install Git.Git
    docker compose up --build
    ```
 
-**Если мало места на диске** — собирайте по одному образу, чтобы не закончилось место:
+**Если мало места на диске** — собирайте по одному образу:
    ```bash
-   docker compose build --no-parallel
+   docker compose build pull-model
+   docker compose build api
+   docker compose build telegram_bot
    docker compose up -d
    ```
 
