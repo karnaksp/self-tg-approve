@@ -41,6 +41,7 @@
 ├─ errors.md
 ├─ images
 │  └─ datamodel.png
+├─ install-docker.sh
 ├─ install_ollama.sh
 ├─ loader.Dockerfile
 ├─ loader.py
@@ -67,6 +68,21 @@
 - **Pylint**: Для проверки стиля кода.
 - **Isort**: Для автоматической сортировки импортов.
 
+## Установка зависимостей
+
+### Linux (сервер)
+```bash
+sudo bash install-docker.sh
+# Перелогиньтесь или: newgrp docker
+```
+
+### Windows
+```powershell
+winget install Docker.DockerDesktop
+winget install Git.Git
+```
+Или скачайте [Docker Desktop](https://www.docker.com/products/docker-desktop/) и [Git](https://git-scm.com/) вручную. После установки перезапустите терминал.
+
 ## Как Запустить
 
 1. Клонируйте репозиторий.
@@ -74,6 +90,12 @@
 3. Запустите:
    ```bash
    docker compose up --build
+   ```
+
+**Если мало места на диске** — собирайте по одному образу, чтобы не закончилось место:
+   ```bash
+   docker compose build --no-parallel
+   docker compose up -d
    ```
 
 Всё. Виртуальное окружение не нужно — зависимости собираются в Docker.
