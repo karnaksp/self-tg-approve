@@ -10,3 +10,5 @@ apimoex
 pandas
 matplotlib
 moviepy
+yfinance
+forex-python

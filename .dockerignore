@@ -5,3 +5,7 @@
 !front-end/*
 front-end/node_modules/*
 !wait-for-it.sh
+__pycache__
+*.pyc
+.env
+.git

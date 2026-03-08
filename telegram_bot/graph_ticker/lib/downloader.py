@@ -255,10 +255,10 @@ def international_data(engine, market, ticker, start_date, end_date):
 
 def parse_ticker_spec(spec: str):
     """
-    Преобразует строку вида 'AAPL:global:shares'
+    Преобразует строку вида 'AAPL|global|shares'
     в структуру {ticker, engine, market}
     """
-    parts = spec.split(":")
+    parts = spec.split("|")
     if len(parts) != 3:
         raise ValueError(
             f"Неверный формат для '{spec}'. Ожидается ticker:engine:market"

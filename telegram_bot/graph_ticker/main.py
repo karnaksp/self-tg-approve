@@ -6,7 +6,7 @@ def parse_ticker_spec(spec: str):
     parts = spec.split("|")
     if len(parts) != 3:
         raise ValueError(
-            f"Invalid ticker format '{spec}'. Expected: TICKER:ENGINE:MARKET"
+            f"Invalid ticker format '{spec}'. Expected: TICKER|ENGINE|MARKET"
         )
     return {"ticker": parts[0], "engine": parts[1], "market": parts[2]}
 
@@ -21,7 +21,7 @@ def parse_args():
         "--tickers",
         nargs="*",
         required=True,
-        help="Ticker specifications: TICKER:ENGINE:MARKET",
+        help="Ticker specifications: TICKER|ENGINE|MARKET",
     )
     parser.add_argument(
         "--ticker_file", help="File containing ticker specifications (one per line)"

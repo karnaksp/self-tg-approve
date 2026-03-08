@@ -40,15 +40,15 @@ def main():
     application.add_handler(CommandHandler("talk_rag", start_talk))
     application.add_handler(CommandHandler("stop_talk", stop_talk))
     # application.add_handler(CommandHandler("upload_pdf", upload_pdf))
+
+    application.add_handler(conv_handler)
+
     application.add_handler(MessageHandler(filters.TEXT, handle_talk))
     application.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
     application.add_handler(MessageHandler(None, handle_message))
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(conv_handler)
 
-    # job_queue = application.job_queue
-    # job_queue.run_repeating(check_inactive_sessions, interval=100)
-
+    # Start the bot
     application.run_polling()
 
 

@@ -1,15 +1,32 @@
 version: "3.8"
 
+x-n8n: &service-n8n
+  image: n8nio/n8n:latest
+  networks: ['net']
+  environment:
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=postgres
+    - DB_POSTGRESDB_USER=${POSTGRES_USER}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    - N8N_DIAGNOSTICS_ENABLED=false
+    - N8N_PERSONALIZATION_ENABLED=false
+    - N8N_ENCRYPTION_KEY
+    - N8N_USER_MANAGEMENT_JWT_SECRET
+    - OLLAMA_HOST=${OLLAMA_HOST:-llm:11434}
+  env_file:
+    - path: .env
+      required: true
+
 services:
   llm:
     image: ollama/ollama:latest
     container_name: ollama
     restart: unless-stopped
     volumes:
-      - ollama_data:/root/.ollama   # сохраняем модели и настройки
+      - ollama_data:/root/.ollama
     ports:
-      - "11434:11434"              # REST API порт
-    command: ["serve"]              # запускаем Ollama сервер
+      - "11434:11434"
+    command: ["serve"]
     networks:
       - net
 
@@ -22,7 +39,7 @@ services:
     env_file:
       - .env
     environment:
-      - OLLAMA_BASE_URL=http://llm:11434   # обращаемся к сервису по имени контейнера
+      - OLLAMA_BASE_URL=http://llm:11434
       - LLM=${LLM}
     networks:
       - net
@@ -42,6 +59,8 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
       - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+    volumes:
+      - .:/app
     networks:
       - net
     depends_on:
@@ -61,6 +80,8 @@ services:
       - CHANNEL_ID=${CHANNEL_ID}
       - ADMIN_ID=${ADMIN_ID}
       - TOKEN=${TOKEN}
+    volumes:
+      - ./telegram_bot:/app
     networks:
       - net
     ports:
@@ -68,8 +89,70 @@ services:
     depends_on:
       - pull-model
 
+  postgres:
+    image: postgres:16-alpine
+    hostname: postgres
+    networks: ['net']
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  n8n-import:
+    <<: *service-n8n
+    hostname: n8n-import
+    container_name: n8n-import
+    entrypoint: /bin/sh
+    command:
+      - "-c"
+      - "n8n import:credentials --separate --input=/net-data/credentials && n8n import:workflow --separate --input=/net-data/workflows"
+    volumes:
+      - ./n8n/demo-data:/net-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  n8n:
+    <<: *service-n8n
+    hostname: n8n
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - 5678:5678
+    volumes:
+      - n8n_storage:/home/node/.n8n
+      - ./n8n/demo-data:/net-data
+      - ./shared:/data/shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+      n8n-import:
+        condition: service_completed_successfully
+
+  qdrant:
+    image: qdrant/qdrant
+    hostname: qdrant
+    container_name: qdrant
+    networks: ['net']
+    restart: unless-stopped
+    ports:
+      - 6333:6333
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
 volumes:
   ollama_data:
+  n8n_storage:
+  postgres_data:
+  qdrant_storage:
 
 networks:
   net:
