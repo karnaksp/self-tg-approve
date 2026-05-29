@@ -1,5 +1,3 @@
-version: "3.8"
-
 x-n8n: &service-n8n
   image: n8nio/n8n:latest
   networks: ['net']
