@@ -1,5 +1,7 @@
 # Self TG Approve
 
+[![Quality](https://github.com/karnaksp/self-tg-approve/actions/workflows/quality.yml/badge.svg)](https://github.com/karnaksp/self-tg-approve/actions/workflows/quality.yml)
+
 Telegram access approval bot with local LLM support, LangChain/RAG experiments, Neo4j-backed memory, n8n workflow automation, and Docker Compose packaging.
 
 This is a secondary portfolio project: it demonstrates AI automation and backend integration around Telegram workflows. It is not positioned as a primary Data Engineering showcase.
@@ -86,7 +88,9 @@ Optional values:
 - If credentials are exported for local experiments, keep them outside git or sanitize them before sharing.
 - Committed workflow JSON should not contain active tokens or personal account secrets.
 
-## Development
+## Quality Gate
+
+Run the same lightweight checks used by GitHub Actions before changing the Compose stack or exported workflow files:
 
 ```bash
 python scripts/validate_project.py
@@ -95,4 +99,4 @@ docker compose --env-file .env.example config --quiet
 rm -f .env
 ```
 
-The repository intentionally excludes generated Python bytecode, local databases, virtual environments, and n8n credential exports.
+The gate validates env-template hygiene, n8n workflow JSON, Python syntax, and Docker Compose config. The repository intentionally excludes generated Python bytecode, local databases, virtual environments, and n8n credential exports.
