@@ -1,0 +1,23 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate repository hygiene
+        run: |
+          python scripts/validate_project.py
+      - name: Validate Docker Compose config
+        run: |
+          cp .env.example .env
+          docker compose --env-file .env.example config --quiet
+          rm -f .env
