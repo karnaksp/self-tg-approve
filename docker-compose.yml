@@ -112,7 +112,7 @@ services:
     entrypoint: /bin/sh
     command:
       - "-c"
-      - "n8n import:credentials --separate --input=/net-data/credentials && n8n import:workflow --separate --input=/net-data/workflows"
+      - "if ls /net-data/credentials/*.json >/dev/null 2>&1; then n8n import:credentials --separate --input=/net-data/credentials; else echo 'No demo credentials to import'; fi && n8n import:workflow --separate --input=/net-data/workflows"
     volumes:
       - ./n8n/demo-data:/net-data
     depends_on:
