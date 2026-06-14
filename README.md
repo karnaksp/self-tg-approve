@@ -89,9 +89,10 @@ Optional values:
 ## Development
 
 ```bash
-cd telegram_bot
-make check_lint
+python scripts/validate_project.py
+cp .env.example .env
+docker compose --env-file .env.example config --quiet
+rm -f .env
 ```
 
 The repository intentionally excludes generated Python bytecode, local databases, virtual environments, and n8n credential exports.
-
