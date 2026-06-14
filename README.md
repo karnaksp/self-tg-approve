@@ -1,118 +1,97 @@
+# Self TG Approve
 
-# Ck Secretary Bot: Умная секретарша в Telegram
-![alt text](images/image.png)
+Telegram access approval bot with local LLM support, LangChain/RAG experiments, Neo4j-backed memory, n8n workflow automation, and Docker Compose packaging.
 
-**Ck Secretary Bot** — это Telegram-бот aka секретарша, оснащённая искусственным интеллектом на базе Ollama, которая помогает управлять доступом к вашему личному каналу. Бот анализирует запросы от пользователей и решает, предоставить им доступ, основываясь на том, содержит ли их сообщение смешной мем или нет. Кроме того, бот может вести интересные беседы на любые темы, делая общение с посетителями канала более живым и увлекательным. Бот так же оснащен графовой базой данных для хранения данных общения с пользователем внутри сессии и хранения информации для RAG системы. Можно общаться с ботом как в режиме RAG, так и без него, тогда данные в базе данных не сохраняются даже внутри сессии.
+This is a secondary portfolio project: it demonstrates AI automation and backend integration around Telegram workflows. It is not positioned as a primary Data Engineering showcase.
 
+![Bot screenshot](images/image.png)
 
-## Функциональность
+## What It Does
 
-### Управление Доступом
-Бот анализирует сообщения пользователей и определяет, стоит ли предоставлять им доступ к вашему личному каналу. Если сообщение содержит смешной мем в виде картинки, бот отправляет его владельцу канала с запросом - одобрить вступление или отклонить, если да - пользователь получает доступ. В противном случае, бот может предложить отправить более забавное сообщение или послать собеседника подождать в коридоре.
+- Receives Telegram access requests for a private channel.
+- Lets the channel owner approve or reject requests.
+- Supports conversational AI through Ollama/local LLM components.
+- Uses Neo4j for graph-backed session memory and RAG experiments.
+- Includes optional n8n workflow import for local automation experiments.
+- Runs as a multi-service Docker Compose stack.
 
-### Интерактивное Общение
-Бот способен вести полноценные диалоги с пользователями, обсуждая любые темы. Это позволяет создать более дружественную и интересную атмосферу в вашем канале.
+## Stack
 
-### Поддержка Базы Данных
-Проект использует базу данных Neo4j для хранения информации о пользователях, их запросах и статусах доступа. Это обеспечивает эффективное управление данными и упрощает масштабирование.
+- Python
+- python-telegram-bot
+- LangChain
+- Ollama
+- Neo4j
+- n8n
+- PostgreSQL for n8n
+- Docker Compose
 
-## Технологии и Инструменты
+## Architecture
 
-### Язык Программирования и Библиотеки
-- **Python**: Основной язык программирования проекта.
-- **LangChain**: Пакеты для работы с RAG.
-- **Neo4j**: База данных для хранения данных.
-- **Pillow**: Для работы с изображениями.
-- **Requests**: Для выполнения HTTP-запросов.
-- **Python-Telegram-Bot**: Библиотека для создания Telegram-ботов.
-- **Docker**: для каждого сервиса свой докер, почи все работают в одной сети.
-- **Makefile**: как всегда, тестирование кода, запуск бота.
+```text
+Telegram user
+    |
+    v
+telegram_bot service
+    |
+    +--> owner approval flow
+    |
+    +--> api service
+             |
+             +--> Ollama / local LLM
+             +--> LangChain RAG chain
+             +--> Neo4j memory graph
 
-### Структура Проекта
-```
-├─ .dockerignore
-├─ .git
-├─ .gitignore
-├─ api.Dockerfile
-├─ api.py
-├─ chains.py
-├─ docker-compose.yml
-├─ entrypoint.sh
-├─ errors.md
-├─ images
-│  └─ datamodel.png
-├─ install-docker.sh
-├─ install_ollama.sh
-├─ loader.Dockerfile
-├─ loader.py
-├─ pull_model.Dockerfile
-├─ requirements.txt
-├─ utils.py
-├─ telegram_bot
-│  ├─ Makefile
-│  ├─ commands.py
-│  ├─ handlers.py
-│  ├─ logger_config.py
-│  ├─ main.py
-│  ├─ message_config.py
-│  ├─ requirements.txt
-│  ├─ telegram_bot.Dockerfile
-│  └─ utils.py
-└─ wait-for-it.sh
+n8n + Postgres are optional workflow automation services.
 ```
 
-### Инструменты Разработки
-- **Makefile**: Для сборки и запуска проекта.
-- **Dockerfile**: Для контейнеризации приложения.
-- **pytest**: Для тестирования кода.
-- **Pylint**: Для проверки стиля кода.
-- **Isort**: Для автоматической сортировки импортов.
+## Quick Start
 
-## Установка зависимостей
-
-### Linux (сервер)
 ```bash
-sudo bash install-docker.sh
-# Перелогиньтесь или: newgrp docker
-```
-
-### Windows
-```powershell
-winget install Docker.DockerDesktop
-winget install Git.Git
-```
-Или скачайте [Docker Desktop](https://www.docker.com/products/docker-desktop/) и [Git](https://git-scm.com/) вручную. После установки перезапустите терминал.
-
-## Как Запустить
-
-1. Клонируйте репозиторий.
-2. Скопируйте `.env.example` в `.env` и заполните переменные (токены, пароли, id).
-3. Запустите:
-   ```bash
-   docker compose up --build
-   ```
-
-**Если мало места на диске** — собирайте по одному образу:
-   ```bash
-   docker compose build pull-model
-   docker compose build api
-   docker compose build telegram_bot
-   docker compose up -d
-   ```
-
-Всё. Виртуальное окружение не нужно — зависимости собираются в Docker.
-
-### Развёртывание (git clone на сервере)
-```bash
-# На сервере
-git clone <repo-url> .
 cp .env.example .env
-# отредактируйте .env
-docker compose up -d --build
+# edit .env: Telegram token, channel id, admin id, local passwords
+docker compose up --build
 ```
 
-### Тестирование
-Проект оснащён системой тестирования, которая проверяет корректность форматирование. Вы можете запустить тесты с помощью команды:
+If the machine has limited disk space, build the heavy images separately:
+
 ```bash
+docker compose build pull-model
+docker compose build api
+docker compose build telegram_bot
+docker compose up -d
+```
+
+## Configuration
+
+Use `.env.example` as the only committed configuration template.
+
+Required values:
+
+- `TOKEN` - Telegram bot token.
+- `CHANNEL_ID` - target channel id.
+- `ADMIN_ID` - Telegram user id that can approve requests.
+- `POSTGRES_PASSWORD`, `N8N_ENCRYPTION_KEY`, `N8N_USER_MANAGEMENT_JWT_SECRET` - local service secrets.
+
+Optional values:
+
+- `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `GOOGLE_API_KEY` for cloud LLM experiments.
+- `LANGCHAIN_API_KEY` for LangChain tracing.
+- `LLM` and `EMBEDDING_MODEL` for local model selection.
+
+## Security Notes
+
+- Do not commit `.env`.
+- Do not commit n8n exported credentials. The `n8n/demo-data/credentials/` directory is intentionally kept empty.
+- If credentials are exported for local experiments, keep them outside git or sanitize them before sharing.
+- Committed workflow JSON should not contain active tokens or personal account secrets.
+
+## Development
+
+```bash
+cd telegram_bot
 make check_lint
 ```
+
+The repository intentionally excludes generated Python bytecode, local databases, virtual environments, and n8n credential exports.
+

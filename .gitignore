@@ -8,3 +8,17 @@ myenv
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+n8n/demo-data/credentials/*.json
+n8n_storage/
+postgres_data/
+qdrant_storage/
+ollama_data/
