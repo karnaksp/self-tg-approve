@@ -2,20 +2,20 @@
 
 [![Quality](https://github.com/karnaksp/self-tg-approve/actions/workflows/quality.yml/badge.svg)](https://github.com/karnaksp/self-tg-approve/actions/workflows/quality.yml)
 
-Telegram access approval bot with local LLM support, LangChain/RAG experiments, Neo4j-backed memory, n8n workflow automation, and Docker Compose packaging.
+Telegram-бот для approval flow доступа в канал: local LLM support, эксперименты с LangChain/RAG, Neo4j-backed memory, n8n workflow automation и упаковка через Docker Compose.
 
-This is a secondary portfolio project: it demonstrates AI automation and backend integration around Telegram workflows. It is not positioned as a primary Data Engineering showcase.
+Это вторичный портфельный проект. Он показывает AI automation и backend integration вокруг Telegram workflows, но не позиционируется как главный Data Engineering showcase.
 
 ![Bot screenshot](images/image.png)
 
-## What It Does
+## Что делает проект
 
-- Receives Telegram access requests for a private channel.
-- Lets the channel owner approve or reject requests.
-- Supports conversational AI through Ollama/local LLM components.
-- Uses Neo4j for graph-backed session memory and RAG experiments.
-- Includes optional n8n workflow import for local automation experiments.
-- Runs as a multi-service Docker Compose stack.
+- Принимает Telegram access requests для приватного канала.
+- Позволяет владельцу канала approve или reject заявки.
+- Поддерживает conversational AI через Ollama/local LLM components.
+- Использует Neo4j для graph-backed session memory и RAG experiments.
+- Включает optional n8n workflow import для локальных automation experiments.
+- Запускается как multi-service Docker Compose stack.
 
 ## Stack
 
@@ -28,7 +28,7 @@ This is a secondary portfolio project: it demonstrates AI automation and backend
 - PostgreSQL for n8n
 - Docker Compose
 
-## Architecture
+## Архитектура
 
 ```text
 Telegram user
@@ -44,10 +44,10 @@ telegram_bot service
              +--> LangChain RAG chain
              +--> Neo4j memory graph
 
-n8n + Postgres are optional workflow automation services.
+n8n + Postgres — optional workflow automation services.
 ```
 
-## Quick Start
+## Быстрый старт
 
 ```bash
 cp .env.example .env
@@ -55,7 +55,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-If the machine has limited disk space, build the heavy images separately:
+Если на машине мало места, heavy images можно собрать отдельно:
 
 ```bash
 docker compose build pull-model
@@ -64,33 +64,33 @@ docker compose build telegram_bot
 docker compose up -d
 ```
 
-## Configuration
+## Конфигурация
 
-Use `.env.example` as the only committed configuration template.
+Используйте `.env.example` как единственный configuration template, который хранится в git.
 
-Required values:
+Обязательные значения:
 
 - `TOKEN` - Telegram bot token.
 - `CHANNEL_ID` - target channel id.
-- `ADMIN_ID` - Telegram user id that can approve requests.
+- `ADMIN_ID` - Telegram user id, который может approve requests.
 - `POSTGRES_PASSWORD`, `N8N_ENCRYPTION_KEY`, `N8N_USER_MANAGEMENT_JWT_SECRET` - local service secrets.
 
-Optional values:
+Опциональные значения:
 
-- `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `GOOGLE_API_KEY` for cloud LLM experiments.
-- `LANGCHAIN_API_KEY` for LangChain tracing.
-- `LLM` and `EMBEDDING_MODEL` for local model selection.
+- `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `GOOGLE_API_KEY` для cloud LLM experiments.
+- `LANGCHAIN_API_KEY` для LangChain tracing.
+- `LLM` и `EMBEDDING_MODEL` для выбора local model.
 
-## Security Notes
+## Security notes
 
-- Do not commit `.env`.
-- Do not commit n8n exported credentials. The `n8n/demo-data/credentials/` directory is intentionally kept empty.
-- If credentials are exported for local experiments, keep them outside git or sanitize them before sharing.
-- Committed workflow JSON should not contain active tokens or personal account secrets.
+- Не коммитьте `.env`.
+- Не коммитьте n8n exported credentials. Каталог `n8n/demo-data/credentials/` специально оставлен пустым.
+- Если credentials экспортируются для локальных экспериментов, держите их вне git или sanitise перед передачей.
+- Закоммиченные workflow JSON не должны содержать active tokens или secrets личных аккаунтов.
 
-## Quality Gate
+## Quality gate
 
-Run the same lightweight checks used by GitHub Actions before changing the Compose stack or exported workflow files:
+Перед изменениями в Compose stack или exported workflow files запускайте те же lightweight checks, что используются в GitHub Actions:
 
 ```bash
 python scripts/validate_project.py
@@ -99,4 +99,4 @@ docker compose --env-file .env.example config --quiet
 rm -f .env
 ```
 
-The gate validates env-template hygiene, n8n workflow JSON, Python syntax, and Docker Compose config. The repository intentionally excludes generated Python bytecode, local databases, virtual environments, and n8n credential exports.
+Gate проверяет env-template hygiene, n8n workflow JSON, Python syntax и Docker Compose config. Репозиторий намеренно исключает generated Python bytecode, local databases, virtual environments и n8n credential exports.
