@@ -4,7 +4,7 @@
 
 Telegram-бот для approval flow доступа в канал: local LLM support, эксперименты с LangChain/RAG, Neo4j-backed memory, n8n workflow automation и упаковка через Docker Compose.
 
-Это вторичный портфельный проект. Он показывает AI automation и backend integration вокруг Telegram workflows, но не позиционируется как главный Data Engineering showcase.
+Это вторичный прикладной проект: он показывает AI automation и backend integration вокруг Telegram workflows, но не конкурирует с основными Data Engineering системами.
 
 ![Bot screenshot](images/image.png)
 
