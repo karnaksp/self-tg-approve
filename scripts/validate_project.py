@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight repository quality checks for the portfolio automation project."""
+"""Lightweight repository quality checks for the Telegram automation project."""
 
 from __future__ import annotations
 
