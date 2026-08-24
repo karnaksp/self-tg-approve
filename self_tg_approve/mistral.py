@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from . import __version__
 from .config import Settings
 from .memory import ChatMessage
 
@@ -43,7 +44,7 @@ class MistralClient:
             headers={
                 "Authorization": f"Bearer {settings.mistral_api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "self-tg-approve/2.0",
+                "User-Agent": f"self-tg-approve/{__version__}",
             },
         )
 

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import py_compile
 from pathlib import Path
 
 
@@ -74,9 +73,10 @@ def validate_python_syntax() -> list[str]:
         ):
             continue
         try:
-            py_compile.compile(str(path), doraise=True)
-        except py_compile.PyCompileError as exc:
-            failures.append(f"{path.relative_to(ROOT)} does not compile: {exc.msg}")
+            source = path.read_text(encoding="utf-8")
+            compile(source, str(path), "exec")
+        except (OSError, SyntaxError, UnicodeError) as exc:
+            failures.append(f"{path.relative_to(ROOT)} does not compile: {exc}")
     return failures
 
 
