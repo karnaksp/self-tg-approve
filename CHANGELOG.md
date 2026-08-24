@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2 — 2026-08-24
+
+- Access-логи `httpx`, `httpcore` и `telegram.request` принудительно ограничены
+  уровнем WARNING, чтобы Telegram-токен никогда не попадал в journald через URL.
+- В `systemd` добавлен дополнительный фильтр строк Telegram Bot API.
+
 ## 2.0.1 — 2026-08-24
 
 - Валидатор синтаксиса больше не пишет `__pycache__` и работает от read-only

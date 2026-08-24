@@ -38,6 +38,7 @@ from .prompts import COFFEE_OPTIONS, INFO_TEXT, START_TEXT, SYSTEM_PROMPT
 
 LOGGER = logging.getLogger(__name__)
 CALLBACK_PATTERN = r"^(approve|reject):[0-9]+$"
+SENSITIVE_NETWORK_LOGGERS = ("httpx", "httpcore", "telegram.request")
 
 
 def _settings(context: CallbackContext[Any, Any, Any, Any]) -> Settings:
@@ -447,6 +448,17 @@ def build_application(
     return application
 
 
+def configure_logging(level: str) -> None:
+    logging.basicConfig(
+        level=getattr(logging, level),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    # Telegram embeds the bot token in its Bot API URL. Never allow HTTP access
+    # loggers to print full request URLs, even when application DEBUG is enabled.
+    for logger_name in SENSITIVE_NETWORK_LOGGERS:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+
 def main() -> None:
     load_dotenv(override=False)
     try:
@@ -454,9 +466,6 @@ def main() -> None:
     except ConfigError as exc:
         raise SystemExit(f"Ошибка конфигурации: {exc}") from exc
 
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging(settings.log_level)
     application = build_application(settings)
     application.run_polling(drop_pending_updates=False)

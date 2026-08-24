@@ -48,6 +48,7 @@ UMask=0077
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=self-tg-approve
+LogFilterPatterns=~api\.telegram\.org/bot
 
 [Install]
 WantedBy=multi-user.target
