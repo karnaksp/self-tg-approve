@@ -1,0 +1,179 @@
+"""Environment-backed configuration with strict startup validation."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from typing import Mapping
+
+
+class ConfigError(ValueError):
+    """Raised when required configuration is absent or invalid."""
+
+
+def _required(env: Mapping[str, str], name: str) -> str:
+    value = env.get(name, "").strip()
+    if not value:
+        raise ConfigError(f"Не задана обязательная переменная {name}")
+    return value
+
+
+def _integer(
+    env: Mapping[str, str],
+    name: str,
+    default: int | None = None,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    raw = env.get(name)
+    if raw is None or not raw.strip():
+        if default is None:
+            raise ConfigError(f"Не задана обязательная переменная {name}")
+        value = default
+    else:
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise ConfigError(f"{name} должна быть целым числом") from exc
+
+    if minimum is not None and value < minimum:
+        raise ConfigError(f"{name} должна быть не меньше {minimum}")
+    if maximum is not None and value > maximum:
+        raise ConfigError(f"{name} должна быть не больше {maximum}")
+    return value
+
+
+def _floating(
+    env: Mapping[str, str],
+    name: str,
+    default: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    raw = env.get(name)
+    try:
+        value = default if raw is None or not raw.strip() else float(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{name} должна быть числом") from exc
+    if not minimum <= value <= maximum:
+        raise ConfigError(f"{name} должна быть от {minimum} до {maximum}")
+    return value
+
+
+def _chat_id(value: str) -> int | str:
+    value = value.strip()
+    if value.lstrip("-").isdigit():
+        return int(value)
+    if value.startswith("@") and len(value) > 1:
+        return value
+    raise ConfigError("CHANNEL_ID должен быть числовым ID или @username канала")
+
+
+def _user_ids(env: Mapping[str, str], name: str) -> frozenset[int]:
+    raw = env.get(name, "").strip()
+    if not raw:
+        return frozenset()
+    try:
+        return frozenset(int(item.strip()) for item in raw.split(",") if item.strip())
+    except ValueError as exc:
+        raise ConfigError(f"{name} должен содержать числовые ID через запятую") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class Settings:
+    """Runtime settings. Secret fields are excluded from representations."""
+
+    telegram_token: str = field(repr=False)
+    channel_id: int | str
+    admin_id: int
+    mistral_api_key: str = field(repr=False)
+    mistral_model: str = "mistral-small-latest"
+    mistral_timeout_seconds: float = 45.0
+    mistral_max_tokens: int = 600
+    mistral_temperature: float = 0.45
+    session_ttl_minutes: int = 60
+    session_history_messages: int = 12
+    session_history_chars: int = 12_000
+    request_cooldown_seconds: float = 3.0
+    mistral_allowed_user_ids: frozenset[int] = frozenset()
+    invite_link_ttl_hours: int = 24
+    log_level: str = "INFO"
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
+        source = os.environ if env is None else env
+        model = source.get("MISTRAL_MODEL", "mistral-small-latest").strip()
+        if not model:
+            raise ConfigError("MISTRAL_MODEL не может быть пустой")
+
+        log_level = source.get("LOG_LEVEL", "INFO").strip().upper()
+        if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise ConfigError("LOG_LEVEL имеет недопустимое значение")
+
+        return cls(
+            telegram_token=_required(source, "TOKEN"),
+            channel_id=_chat_id(_required(source, "CHANNEL_ID")),
+            admin_id=_integer(source, "ADMIN_ID"),
+            mistral_api_key=_required(source, "MISTRAL_API_KEY"),
+            mistral_model=model,
+            mistral_timeout_seconds=_floating(
+                source,
+                "MISTRAL_TIMEOUT_SECONDS",
+                45.0,
+                minimum=5.0,
+                maximum=120.0,
+            ),
+            mistral_max_tokens=_integer(
+                source,
+                "MISTRAL_MAX_TOKENS",
+                600,
+                minimum=64,
+                maximum=2_048,
+            ),
+            mistral_temperature=_floating(
+                source,
+                "MISTRAL_TEMPERATURE",
+                0.45,
+                minimum=0.0,
+                maximum=1.0,
+            ),
+            session_ttl_minutes=_integer(
+                source,
+                "SESSION_TTL_MINUTES",
+                60,
+                minimum=5,
+                maximum=1_440,
+            ),
+            session_history_messages=_integer(
+                source,
+                "SESSION_HISTORY_MESSAGES",
+                12,
+                minimum=2,
+                maximum=40,
+            ),
+            session_history_chars=_integer(
+                source,
+                "SESSION_HISTORY_CHARS",
+                12_000,
+                minimum=1_000,
+                maximum=50_000,
+            ),
+            request_cooldown_seconds=_floating(
+                source,
+                "MISTRAL_REQUEST_COOLDOWN_SECONDS",
+                3.0,
+                minimum=0.0,
+                maximum=60.0,
+            ),
+            mistral_allowed_user_ids=_user_ids(source, "MISTRAL_ALLOWED_USER_IDS"),
+            invite_link_ttl_hours=_integer(
+                source,
+                "INVITE_LINK_TTL_HOURS",
+                24,
+                minimum=1,
+                maximum=168,
+            ),
+            log_level=log_level,
+        )

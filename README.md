@@ -1,102 +1,135 @@
-# Self TG Approve
+# Self TG Approve — Mistral Lite
 
-[![Quality](https://github.com/karnaksp/self-tg-approve/actions/workflows/quality.yml/badge.svg)](https://github.com/karnaksp/self-tg-approve/actions/workflows/quality.yml)
+Легковесный Telegram-бот для заявок в приватный канал и коротких разговоров через
+Mistral API. Версия 2.0 не запускает локальные модели и не требует Docker, n8n,
+PostgreSQL, Qdrant, LangChain или ffmpeg.
 
-Telegram-бот для approval flow доступа в канал: local LLM support, эксперименты с LangChain/RAG, Neo4j-backed memory, n8n workflow automation и упаковка через Docker Compose.
+![Пример approval-flow](images/image.png)
 
-Это вторичный прикладной проект: он показывает AI automation и backend integration вокруг Telegram workflows, но не конкурирует с основными Data Engineering системами.
+## Возможности
 
-![Bot screenshot](images/image.png)
-
-## Что делает проект
-
-- Принимает Telegram access requests для приватного канала.
-- Позволяет владельцу канала approve или reject заявки.
-- Поддерживает conversational AI через Ollama/local LLM components.
-- Использует Neo4j для graph-backed session memory и RAG experiments.
-- Включает optional n8n workflow import для локальных automation experiments.
-- Запускается как multi-service Docker Compose stack.
-
-## Stack
-
-- Python
-- python-telegram-bot
-- LangChain
-- Ollama
-- Neo4j
-- n8n
-- PostgreSQL for n8n
-- Docker Compose
+- `/join_request`: пользователь присылает мем, администратор получает кнопки
+  «Одобрить» и «Отказать».
+- Одобренный пользователь получает одноразовую ссылку с ограниченным сроком жизни.
+- `/talk`: прямой асинхронный вызов Mistral Chat Completions API.
+- Короткая история текущей сессии в оперативной памяти, ограниченная одновременно
+  количеством сообщений, числом символов и TTL.
+- `/clear` забывает контекст, `/stop_talk` завершает разговор.
+- Никаких входящих портов: Telegram работает через long polling.
 
 ## Архитектура
 
 ```text
-Telegram user
-    |
-    v
-telegram_bot service
-    |
-    +--> owner approval flow
-    |
-    +--> api service
-             |
-             +--> Ollama / local LLM
-             +--> LangChain RAG chain
-             +--> Neo4j memory graph
-
-n8n + Postgres — optional workflow automation services.
+Telegram user ──HTTPS──> Python bot ──HTTPS──> Mistral API
+       │                     │
+       └── meme request ─────┴──> Telegram admin approve/reject
 ```
+
+В runtime всего три закреплённые зависимости: `python-telegram-bot`, `httpx` и
+`python-dotenv`. Состояние не пишется на диск и исчезает после TTL или перезапуска.
 
 ## Быстрый старт
 
+Требуется Python 3.10 или новее.
+
 ```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
 cp .env.example .env
-# edit .env: Telegram token, channel id, admin id, local passwords
-docker compose up --build
 ```
 
-Если на машине мало места, heavy images можно собрать отдельно:
+Заполните в `.env`:
+
+- `TOKEN` — токен Telegram-бота;
+- `CHANNEL_ID` — числовой ID или `@username` канала;
+- `ADMIN_ID` — числовой Telegram ID администратора;
+- `MISTRAL_API_KEY` — ключ Mistral API.
+
+Запуск:
 
 ```bash
-docker compose build pull-model
-docker compose build api
-docker compose build telegram_bot
-docker compose up -d
+.venv/bin/python -m self_tg_approve
 ```
 
-## Конфигурация
-
-Используйте `.env.example` как единственный configuration template, который хранится в git.
-
-Обязательные значения:
-
-- `TOKEN` - Telegram bot token.
-- `CHANNEL_ID` - target channel id.
-- `ADMIN_ID` - Telegram user id, который может approve requests.
-- `POSTGRES_PASSWORD`, `N8N_ENCRYPTION_KEY`, `N8N_USER_MANAGEMENT_JWT_SECRET` - local service secrets.
-
-Опциональные значения:
-
-- `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `GOOGLE_API_KEY` для cloud LLM experiments.
-- `LANGCHAIN_API_KEY` для LangChain tracing.
-- `LLM` и `EMBEDDING_MODEL` для выбора local model.
-
-## Security notes
-
-- Не коммитьте `.env`.
-- Не коммитьте n8n exported credentials. Каталог `n8n/demo-data/credentials/` специально оставлен пустым.
-- Если credentials экспортируются для локальных экспериментов, держите их вне git или sanitise перед передачей.
-- Закоммиченные workflow JSON не должны содержать active tokens или secrets личных аккаунтов.
-
-## Quality gate
-
-Перед изменениями в Compose stack или exported workflow files запускайте те же lightweight checks, что используются в GitHub Actions:
+Одноразовая проверка Mistral без запуска Telegram polling:
 
 ```bash
-python scripts/validate_project.py
-cp .env.example .env
-docker compose --env-file .env.example config --quiet
-rm -f .env
+.venv/bin/python -m self_tg_approve.check_mistral
 ```
 
-Gate проверяет env-template hygiene, n8n workflow JSON, Python syntax и Docker Compose config. Репозиторий намеренно исключает generated Python bytecode, local databases, virtual environments и n8n credential exports.
+Проверка Telegram-токена, канала и права создавать invite-ссылки:
+
+```bash
+.venv/bin/python -m self_tg_approve.check_telegram
+```
+
+## Настройки агентессы
+
+| Переменная | По умолчанию | Назначение |
+|---|---:|---|
+| `MISTRAL_MODEL` | `mistral-small-latest` | Модель Free mode |
+| `MISTRAL_MAX_TOKENS` | `600` | Максимальная длина ответа |
+| `MISTRAL_TEMPERATURE` | `0.45` | Вариативность ответа |
+| `SESSION_TTL_MINUTES` | `60` | Время жизни контекста |
+| `SESSION_HISTORY_MESSAGES` | `12` | Число сохранённых реплик |
+| `SESSION_HISTORY_CHARS` | `12000` | Максимальный размер истории |
+| `MISTRAL_REQUEST_COOLDOWN_SECONDS` | `3` | Пауза между запросами пользователя |
+| `MISTRAL_ALLOWED_USER_IDS` | пусто | Необязательный allowlist ID через запятую |
+| `INVITE_LINK_TTL_HOURS` | `24` | Срок жизни ссылки на канал |
+
+Если `MISTRAL_ALLOWED_USER_IDS` пуст, `/talk` доступен всем пользователям. Для
+защиты бесплатной квоты можно указать, например,
+`MISTRAL_ALLOWED_USER_IDS=123456789,987654321`. Администратор допущен всегда.
+
+Агентесса отвечает на языке пользователя, не заявляет о постоянной памяти и не
+может самостоятельно решать вопрос доступа. Системный промпт находится в
+`self_tg_approve/prompts.py`.
+
+## Проверки
+
+```bash
+.venv/bin/python scripts/validate_project.py
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+CI выполняет те же проверки на Python 3.12 и не использует реальные ключи.
+
+## Установка на малый VPS
+
+Рекомендуемая схема каталогов:
+
+```text
+/opt/self-tg-approve/releases/v2.0.0/  # код и отдельный venv
+/opt/self-tg-approve/current           # symlink на активный релиз
+/etc/self-tg-approve/bot.env           # root:root, mode 0600
+```
+
+Готовый unit: `deploy/self-tg-approve.service`. Он запускает непривилегированного
+пользователя `selftg`, ограничивает память и не требует открывать порты. После
+копирования unit:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now self-tg-approve
+sudo systemctl status self-tg-approve
+sudo journalctl -u self-tg-approve -n 100 --no-pager
+```
+
+Секретный `.env` никогда не коммитится. На сервер следует переносить только нужные
+переменные, а не старые настройки удалённых сервисов.
+
+## Mistral
+
+Клиент использует официальный endpoint
+`POST https://api.mistral.ai/v1/chat/completions`, Bearer-аутентификацию и модель
+`mistral-small-latest`. При `429` и временных `5xx` выполняются короткие повторные
+попытки; ключ, запросы и ответы не логируются.
+
+- [Mistral Free mode](https://docs.mistral.ai/getting-started/quickstarts/studio/activate-and-generate-api-key)
+- [Chat Completions API](https://docs.mistral.ai/api/endpoint/chat)
+- [API errors](https://docs.mistral.ai/resources/error-glossary)
+
+## Лицензия
+
+Apache License 2.0.

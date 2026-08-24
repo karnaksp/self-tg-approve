@@ -1,10 +1,8 @@
 .env
 */.env
-data/
-embedding_model/*
-!embedding_model/.ignore
 .DS_Store
-myenv
+.venv/
+myenv/
 venv/
 __pycache__/
 *.pyc
@@ -17,8 +15,3 @@ __pycache__/
 htmlcov/
 .idea/
 .vscode/
-n8n/demo-data/credentials/*.json
-n8n_storage/
-postgres_data/
-qdrant_storage/
-ollama_data/
