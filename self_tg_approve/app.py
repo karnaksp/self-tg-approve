@@ -34,7 +34,28 @@ from .memory import (
     split_telegram_text,
 )
 from .mistral import MistralAPIError, MistralClient
-from .prompts import COFFEE_OPTIONS, INFO_TEXT, START_TEXT, SYSTEM_PROMPT
+from .prompts import (
+    APPROVAL_TEXT,
+    BOT_COMMANDS,
+    BOT_DESCRIPTION,
+    BOT_SHORT_DESCRIPTION,
+    COFFEE_OPTIONS,
+    INFO_TEXT,
+    JOIN_REQUEST_TEXT,
+    MISTRAL_FAILURE_TEXT,
+    NON_PHOTO_TEXT,
+    NOT_A_STICKER_TEXT,
+    REJECTION_TEXT,
+    SEND_STICKER_REQUEST_TEXT,
+    START_TEXT,
+    STICKER_WITHOUT_REQUEST_TEXT,
+    SYSTEM_PROMPT,
+    TALK_INACTIVE_TEXT,
+    TALK_START_TEXT,
+    TALK_STOP_TEXT,
+    UNEXPECTED_TEXT,
+    WAITING_PHRASES,
+)
 
 LOGGER = logging.getLogger(__name__)
 CALLBACK_PATTERN = r"^(approve|reject):[0-9]+$"
@@ -77,10 +98,9 @@ async def join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not _private_chat(update):
         await message.reply_text("Открой личный чат со мной и повтори /join_request.")
         return
+    context.user_data.pop("awaiting_sticker", None)
     context.user_data["awaiting_photo"] = True
-    await message.reply_text(
-        "Пришли одну картинку или мем. Я передам её администратору на решение ✨"
-    )
+    await message.reply_text(JOIN_REQUEST_TEXT)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -88,27 +108,26 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     if not message or not user or not message.photo:
         return
+    settings = _settings(context)
+    if user.id == settings.admin_id and context.user_data.get("awaiting_sticker"):
+        await message.reply_text(NOT_A_STICKER_TEXT)
+        return
     if not context.user_data.get("awaiting_photo"):
-        await message.reply_text(
-            "Сначала вызови /join_request, чтобы отправить заявку."
-        )
+        await message.reply_text(UNEXPECTED_TEXT)
         return
 
-    settings = _settings(context)
-    display_name = user.username and f"@{user.username}" or user.full_name
+    display_name = user.username or user.full_name
     keyboard = InlineKeyboardMarkup(
         [
-            [
-                InlineKeyboardButton("✅ Одобрить", callback_data=f"approve:{user.id}"),
-                InlineKeyboardButton("❌ Отказать", callback_data=f"reject:{user.id}"),
-            ]
+            [InlineKeyboardButton("Одобрить", callback_data=f"approve:{user.id}")],
+            [InlineKeyboardButton("Отказать", callback_data=f"reject:{user.id}")],
         ]
     )
     try:
         await context.bot.send_photo(
             chat_id=settings.admin_id,
             photo=message.photo[-1].file_id,
-            caption=f"Заявка от {display_name}\nTelegram ID: {user.id}",
+            caption=f"Запрос от пользователя {display_name}",
             reply_markup=keyboard,
         )
     except TelegramError:
@@ -119,7 +138,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     context.user_data["awaiting_photo"] = False
-    await message.reply_text("Заявка отправлена. Теперь решение за администратором 🙌")
 
 
 async def handle_approval_callback(
@@ -152,6 +170,16 @@ async def handle_approval_callback(
         return
 
     try:
+        user_chat = await context.bot.get_chat(user_id)
+        user_name = (
+            getattr(user_chat, "username", None)
+            or getattr(user_chat, "full_name", None)
+            or str(user_id)
+        )
+    except TelegramError:
+        user_name = str(user_id)
+
+    try:
         if action == "approve":
             expires_at = datetime.now(UTC) + timedelta(
                 hours=settings.invite_link_ttl_hours
@@ -164,29 +192,28 @@ async def handle_approval_callback(
             )
             await context.bot.send_message(
                 chat_id=user_id,
-                text=(
-                    "Заявка одобрена! Персональная ссылка действует "
-                    f"{settings.invite_link_ttl_hours} ч.: {invite.invite_link}"
-                ),
+                text=APPROVAL_TEXT.format(invite_link=invite.invite_link),
             )
-            result_text = f"Пользователь {user_id} одобрен."
+            result_text: str | None = f"Пользователь {user_name} одобрен!"
         else:
             await context.bot.send_message(
                 chat_id=user_id,
-                text="Администратор отклонил заявку. В другой раз повезёт больше.",
+                text=REJECTION_TEXT,
             )
-            result_text = f"Пользователю {user_id} отказано."
+            result_text = None
 
         processed.add(request_key)
         if len(processed) > 1_000:
             processed.clear()
             processed.add(request_key)
         await query.edit_message_reply_markup(reply_markup=None)
-        await message.reply_text(result_text)
+        if result_text is not None:
+            await message.reply_text(result_text)
     except TelegramError:
         LOGGER.exception("Ошибка обработки заявки пользователя %s", user_id)
+        operation = "одобрении" if action == "approve" else "отказе"
         await message.reply_text(
-            "Не удалось обработать заявку. Проверь права бота и повтори попытку."
+            f"Ошибка при {operation}: не удалось обработать заявку."
         )
 
 
@@ -201,8 +228,9 @@ async def send_sticker_request(
     if user.id != _settings(context).admin_id:
         await message.reply_text("Команда доступна только администратору.")
         return
+    context.user_data.pop("awaiting_photo", None)
     context.user_data["awaiting_sticker"] = True
-    await message.reply_text("Пришли стикер — я опубликую его в канале.")
+    await message.reply_text(SEND_STICKER_REQUEST_TEXT)
 
 
 async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -211,7 +239,10 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not message or not user or not message.sticker:
         return
     settings = _settings(context)
-    if user.id != settings.admin_id or not context.user_data.get("awaiting_sticker"):
+    if user.id != settings.admin_id:
+        return
+    if not context.user_data.get("awaiting_sticker"):
+        await message.reply_text(STICKER_WITHOUT_REQUEST_TEXT)
         return
     try:
         await context.bot.send_sticker(settings.channel_id, message.sticker.file_id)
@@ -220,7 +251,6 @@ async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await message.reply_text("Не удалось опубликовать стикер. Проверь права бота.")
         return
     context.user_data["awaiting_sticker"] = False
-    await message.reply_text("Стикер опубликован.")
 
 
 async def start_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -239,9 +269,7 @@ async def start_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     context.user_data["talk_active"] = True
     context.user_data["mistral_history"] = []
     context.user_data["last_activity"] = datetime.now(UTC)
-    await message.reply_text(
-        "Я на связи. Помню только короткий контекст этой сессии. Что обсудим?"
-    )
+    await message.reply_text(TALK_START_TEXT)
 
 
 async def clear_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -256,17 +284,16 @@ async def stop_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.user_data["talk_active"] = False
         context.user_data["mistral_history"] = []
         context.user_data.pop("last_activity", None)
-        await update.effective_message.reply_text("Разговор завершён. До встречи ✨")
+        await update.effective_message.reply_text(TALK_STOP_TEXT)
 
 
 def _mistral_error_text(error: MistralAPIError) -> str:
-    if error.status_code == 401:
-        return "Ключ Mistral не принят. Администратору нужно проверить конфигурацию."
-    if error.status_code in {402, 403}:
-        return "Mistral временно недоступен для этого ключа или модели."
-    if error.status_code == 429:
-        return "Бесплатный лимит Mistral сейчас занят. Попробуй немного позже."
-    return "Не удалось получить ответ от Mistral. Попробуй ещё раз чуть позже."
+    return MISTRAL_FAILURE_TEXT
+
+
+async def _send_waiting_phrase(message: Any) -> None:
+    await asyncio.sleep(40)
+    await message.reply_text(random.choice(WAITING_PHRASES))
 
 
 async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -274,11 +301,17 @@ async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.effective_user
     if not message or not user or not message.text:
         return
+    settings = _settings(context)
     if not context.user_data.get("talk_active"):
-        await message.reply_text("Для разговора со мной сначала используй /talk.")
+        if user.id == settings.admin_id and context.user_data.get("awaiting_sticker"):
+            await message.reply_text(NOT_A_STICKER_TEXT)
+            return
+        if context.user_data.get("awaiting_photo"):
+            await message.reply_text(NON_PHOTO_TEXT)
+            return
+        await message.reply_text(TALK_INACTIVE_TEXT)
         return
 
-    settings = _settings(context)
     now = datetime.now(UTC)
     expired_now = clear_expired_history(
         context.user_data,
@@ -313,6 +346,7 @@ async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
     context.user_data["last_activity"] = now
     await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+    waiting_task = asyncio.create_task(_send_waiting_phrase(message))
     try:
         answer = await _mistral(context).chat(
             system_prompt=SYSTEM_PROMPT,
@@ -327,6 +361,10 @@ async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         await message.reply_text(_mistral_error_text(exc))
         return
+    finally:
+        waiting_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, TelegramError):
+            await waiting_task
 
     context.user_data["mistral_history"] = append_exchange(
         history,
@@ -341,8 +379,29 @@ async def handle_talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_message:
-        await update.effective_message.reply_text("Не знаю эту команду. Нажми /info.")
+    if not update.effective_message:
+        return
+    if context.user_data.get("talk_active"):
+        await handle_talk(update, context)
+    else:
+        await update.effective_message.reply_text(TALK_INACTIVE_TEXT)
+
+
+async def handle_other_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    message = update.effective_message
+    user = update.effective_user
+    if not message or not user:
+        return
+    settings = _settings(context)
+    if user.id == settings.admin_id and context.user_data.get("awaiting_sticker"):
+        await message.reply_text(NOT_A_STICKER_TEXT)
+    elif context.user_data.get("awaiting_photo"):
+        await message.reply_text(NON_PHOTO_TEXT)
+    else:
+        await message.reply_text(UNEXPECTED_TEXT)
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -358,15 +417,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def post_init(application: Application[Any, Any, Any, Any, Any, Any]) -> None:
     commands = [
-        BotCommand("start", "главное меню"),
-        BotCommand("info", "как получить доступ"),
-        BotCommand("join_request", "отправить заявку"),
-        BotCommand("talk", "начать разговор с Mistral"),
-        BotCommand("clear", "очистить контекст разговора"),
-        BotCommand("stop_talk", "закончить разговор"),
-        BotCommand("coffee", "случайная музыка"),
+        BotCommand(command, description) for command, description in BOT_COMMANDS
     ]
     await application.bot.set_my_commands(commands)
+    await application.bot.set_my_description(description=BOT_DESCRIPTION)
+    await application.bot.set_my_short_description(
+        short_description=BOT_SHORT_DESCRIPTION
+    )
     me = await application.bot.get_me()
     LOGGER.info("Бот @%s запущен, версия %s", me.username, __version__)
     application.bot_data["session_cleanup_task"] = asyncio.create_task(
@@ -443,6 +500,9 @@ def build_application(
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_talk)
+    )
+    application.add_handler(
+        MessageHandler(filters.ALL & ~filters.COMMAND, handle_other_message)
     )
     application.add_error_handler(error_handler)
     return application

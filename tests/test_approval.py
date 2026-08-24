@@ -34,6 +34,7 @@ def callback_fixture(actor_id: int = 42):
         effective_user=SimpleNamespace(id=actor_id),
     )
     bot = SimpleNamespace(
+        get_chat=AsyncMock(return_value=SimpleNamespace(username="legacy_user")),
         create_chat_invite_link=AsyncMock(
             return_value=SimpleNamespace(invite_link="https://t.me/+one-use")
         ),
@@ -67,8 +68,33 @@ class ApprovalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["member_limit"], 1)
         self.assertEqual(kwargs["chat_id"], -100123)
         bot.send_message.assert_awaited_once()
+        bot.send_message.assert_awaited_once_with(
+            chat_id=777,
+            text=(
+                "Было смешно (или возбуждающе). Проходи по ссылке!: "
+                "https://t.me/+one-use"
+            ),
+        )
         query.edit_message_reply_markup.assert_awaited_once_with(reply_markup=None)
         self.assertEqual(message.reply_text.await_count, 2)
+        self.assertEqual(
+            message.reply_text.await_args_list[0].args[0],
+            "Пользователь legacy_user одобрен!",
+        )
+
+    async def test_rejection_uses_legacy_copy_without_admin_ack(self) -> None:
+        update, context, query, bot, message = callback_fixture()
+        query.data = "reject:777"
+
+        await handle_approval_callback(update, context)
+
+        bot.create_chat_invite_link.assert_not_awaited()
+        bot.send_message.assert_awaited_once_with(
+            chat_id=777,
+            text="Твой мем не смешной! (¬_¬ )",
+        )
+        query.edit_message_reply_markup.assert_awaited_once_with(reply_markup=None)
+        message.reply_text.assert_not_awaited()
 
 
 if __name__ == "__main__":
