@@ -34,6 +34,17 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.channel_id, "@private_channel")
         self.assertEqual(settings.mistral_allowed_user_ids, frozenset({10, 20}))
 
+    def test_accepts_gemini_key_and_defaults(self) -> None:
+        settings = Settings.from_env(
+            {
+                **BASE_ENV,
+                "MISTRAL_API_KEY": "AQ.dummy-key-for-test",
+            }
+        )
+
+        self.assertEqual(settings.mistral_model, "gemini-3.1-flash-lite")
+        self.assertIn("googleapis.com", settings.mistral_api_url)
+
     def test_fails_fast_for_missing_secret(self) -> None:
         env = {**BASE_ENV, "MISTRAL_API_KEY": ""}
         with self.assertRaisesRegex(ConfigError, "MISTRAL_API_KEY"):
@@ -42,6 +53,14 @@ class SettingsTests(unittest.TestCase):
     def test_fails_for_invalid_ids_and_limits(self) -> None:
         with self.assertRaisesRegex(ConfigError, "ADMIN_ID"):
             Settings.from_env({**BASE_ENV, "ADMIN_ID": "admin"})
+        with self.assertRaisesRegex(ConfigError, "ADMIN_ID не может совпадать"):
+            Settings.from_env(
+                {
+                    **BASE_ENV,
+                    "TOKEN": "123456789:ABCdef-secret",
+                    "ADMIN_ID": "123456789",
+                }
+            )
         with self.assertRaisesRegex(ConfigError, "CHANNEL_ID"):
             Settings.from_env({**BASE_ENV, "CHANNEL_ID": "channel"})
         with self.assertRaisesRegex(ConfigError, "MISTRAL_MAX_TOKENS"):

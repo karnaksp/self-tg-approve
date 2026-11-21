@@ -38,15 +38,19 @@ class MistralClient:
         self._settings = settings
         self._max_attempts = max_attempts
         self._semaphore = asyncio.Semaphore(2)
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(settings.mistral_timeout_seconds),
-            transport=transport,
-            headers={
+        client_kwargs: dict[str, Any] = {
+            "timeout": httpx.Timeout(settings.mistral_timeout_seconds),
+            "transport": transport,
+            "headers": {
                 "Authorization": f"Bearer {settings.mistral_api_key}",
                 "Content-Type": "application/json",
                 "User-Agent": f"self-tg-approve/{__version__}",
             },
-        )
+        }
+        if settings.llm_proxy and transport is None:
+            client_kwargs["proxy"] = settings.llm_proxy
+
+        self._client = httpx.AsyncClient(**client_kwargs)
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -80,7 +84,9 @@ class MistralClient:
         last_error: Exception | None = None
         for attempt in range(self._max_attempts):
             try:
-                response = await self._client.post(CHAT_COMPLETIONS_URL, json=payload)
+                response = await self._client.post(
+                    self._settings.mistral_api_url, json=payload
+                )
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_error = exc
                 if attempt + 1 >= self._max_attempts:

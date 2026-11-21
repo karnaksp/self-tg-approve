@@ -90,6 +90,7 @@ class Settings:
     admin_id: int
     mistral_api_key: str = field(repr=False)
     mistral_model: str = "mistral-small-latest"
+    mistral_api_url: str = "https://api.mistral.ai/v1/chat/completions"
     mistral_timeout_seconds: float = 45.0
     mistral_max_tokens: int = 600
     mistral_temperature: float = 0.45
@@ -100,24 +101,62 @@ class Settings:
     mistral_allowed_user_ids: frozenset[int] = frozenset()
     invite_link_ttl_hours: int = 24
     log_level: str = "INFO"
+    llm_proxy: str | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
         source = os.environ if env is None else env
-        model = source.get("MISTRAL_MODEL", "mistral-small-latest").strip()
-        if not model:
-            raise ConfigError("MISTRAL_MODEL не может быть пустой")
+        raw_api_key = (
+            source.get("GEMINI_API_KEY", "").strip()
+            or source.get("MISTRAL_API_KEY", "").strip()
+        )
+        if not raw_api_key:
+            raise ConfigError("Не задана обязательная переменная MISTRAL_API_KEY")
+
+        is_gemini = bool(source.get("GEMINI_API_KEY")) or raw_api_key.startswith(("AQ.", "AIza"))
+        model = source.get("GEMINI_MODEL") or source.get("MISTRAL_MODEL", "").strip()
+        if not model or (is_gemini and model == "mistral-small-latest"):
+            model = "gemini-3.1-flash-lite" if is_gemini else "mistral-small-latest"
+
+        default_url = (
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+            if is_gemini
+            else "https://api.mistral.ai/v1/chat/completions"
+        )
+        api_url = (
+            source.get("GEMINI_API_URL")
+            or source.get("MISTRAL_API_URL")
+            or source.get("LLM_API_URL")
+            or default_url
+        )
 
         log_level = source.get("LOG_LEVEL", "INFO").strip().upper()
         if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ConfigError("LOG_LEVEL имеет недопустимое значение")
 
+        llm_proxy = (
+            source.get("LLM_PROXY", "").strip()
+            or source.get("HTTPS_PROXY", "").strip()
+            or source.get("HTTP_PROXY", "").strip()
+            or None
+        )
+
+        telegram_token = _required(source, "TOKEN")
+        admin_id = _integer(source, "ADMIN_ID")
+        bot_id_part = telegram_token.split(":", 1)[0]
+        if bot_id_part.isdigit() and int(bot_id_part) == admin_id:
+            raise ConfigError(
+                "ADMIN_ID не может совпадать с ID самого бота (из TOKEN). "
+                "В ADMIN_ID должен быть указан ваш личный Telegram ID (узнать его можно у @userinfobot)."
+            )
+
         return cls(
-            telegram_token=_required(source, "TOKEN"),
+            telegram_token=telegram_token,
             channel_id=_chat_id(_required(source, "CHANNEL_ID")),
-            admin_id=_integer(source, "ADMIN_ID"),
-            mistral_api_key=_required(source, "MISTRAL_API_KEY"),
+            admin_id=admin_id,
+            mistral_api_key=raw_api_key,
             mistral_model=model,
+            mistral_api_url=api_url,
             mistral_timeout_seconds=_floating(
                 source,
                 "MISTRAL_TIMEOUT_SECONDS",
@@ -176,4 +215,5 @@ class Settings:
                 maximum=168,
             ),
             log_level=log_level,
+            llm_proxy=llm_proxy,
         )
